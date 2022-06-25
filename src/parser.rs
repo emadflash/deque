@@ -15,7 +15,10 @@ pub(crate) enum ParseError<'src> {
     InvaildOpKind { found: Token<'src> },
 
     #[error("invaild token kind (expected: {expected:?}, found: {found:?}")]
-    InvaildTokenKind { expected: TokenKind<'src>, found: TokenKind<'src> }
+    InvaildTokenKind {
+        expected: TokenKind<'src>,
+        found: TokenKind<'src>,
+    },
 }
 
 #[derive(Debug, PartialEq)]
@@ -41,10 +44,20 @@ impl<'src> Display for Expr<'src> {
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum Stmt<'src> {
-    Expr { expr: Expr<'src> },
-    If { stmt: Expr<'src>, body: Vec<Stmt<'src>> },
-    IfElse { if_arm: Box<Stmt<'src>>, else_arm: Vec<Stmt<'src>> },
-    Label { name: &'src str },
+    Expr {
+        expr: Expr<'src>,
+    },
+    If {
+        stmt: Expr<'src>,
+        body: Vec<Stmt<'src>>,
+    },
+    IfElse {
+        if_arm: Box<Stmt<'src>>,
+        else_arm: Vec<Stmt<'src>>,
+    },
+    Label {
+        name: &'src str,
+    },
 }
 
 #[derive(Debug)]
@@ -92,7 +105,10 @@ impl<'src> Parser<'src> {
     fn expect(&mut self, expected: &TokenKind<'src>) -> Result<(), ParseError<'src>> {
         if let Some(tok) = self.peek() {
             if !matches!(&tok.kind, _expected) {
-                return Err(ParseError::InvaildTokenKind { expected: expected.clone(), found: tok.kind.clone() });
+                return Err(ParseError::InvaildTokenKind {
+                    expected: expected.clone(),
+                    found: tok.kind.clone(),
+                });
             }
         }
 
@@ -173,45 +189,97 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_if_stmt(&mut self, stmt: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
-        assert!(matches!(self.current(), Token { kind: TokenKind::Keyword { kw: "if" }, .. })
-            || matches!(self.current(), Token { kind: TokenKind::Sym { sym: "!" }, .. }));
+        assert!(
+            matches!(
+                self.current(),
+                Token {
+                    kind: TokenKind::Keyword { kw: "if" },
+                    ..
+                }
+            ) || matches!(
+                self.current(),
+                Token {
+                    kind: TokenKind::Sym { sym: "!" },
+                    ..
+                }
+            )
+        );
 
         self.expect(&TokenKind::Sym { sym: "{" })?;
         let mut body: Vec<Stmt<'src>> = Vec::new();
 
         while let Some(tok) = self.next() {
-            if matches!(tok, Token { kind: TokenKind::Sym { sym: "}" }, .. }) {
+            if matches!(
+                tok,
+                Token {
+                    kind: TokenKind::Sym { sym: "}" },
+                    ..
+                }
+            ) {
                 break;
             } else {
                 body.push(self.parse_stmt()?);
             }
         }
 
-        if !matches!(self.current(), Token { kind: TokenKind::Sym { sym: "}" }, .. }) {
-            return Err(ParseError::InvaildTokenKind { expected: TokenKind::Sym { sym: "}" }, found: self.current().clone().kind } );
+        if !matches!(
+            self.current(),
+            Token {
+                kind: TokenKind::Sym { sym: "}" },
+                ..
+            }
+        ) {
+            return Err(ParseError::InvaildTokenKind {
+                expected: TokenKind::Sym { sym: "}" },
+                found: self.current().clone().kind,
+            });
         }
 
-        if matches!(self.peek(), Some(&Token { kind: TokenKind::Keyword { kw: "else" }, ..})) {
+        if matches!(
+            self.peek(),
+            Some(&Token {
+                kind: TokenKind::Keyword { kw: "else" },
+                ..
+            })
+        ) {
             self.next();
             self.expect(&TokenKind::Sym { sym: "{" })?;
 
             let mut else_arm: Vec<Stmt<'src>> = Vec::new();
             while let Some(tok) = self.next() {
-                if matches!(tok, Token { kind: TokenKind::Sym { sym: "}" }, .. }) {
+                if matches!(
+                    tok,
+                    Token {
+                        kind: TokenKind::Sym { sym: "}" },
+                        ..
+                    }
+                ) {
                     break;
                 } else {
                     else_arm.push(self.parse_stmt()?);
                 }
             }
 
-            if !matches!(self.current(), Token { kind: TokenKind::Sym { sym: "}" }, .. }) {
-                return Err(ParseError::InvaildTokenKind { expected: TokenKind::Sym { sym: "}" }, found: self.current().clone().kind } );
+            if !matches!(
+                self.current(),
+                Token {
+                    kind: TokenKind::Sym { sym: "}" },
+                    ..
+                }
+            ) {
+                return Err(ParseError::InvaildTokenKind {
+                    expected: TokenKind::Sym { sym: "}" },
+                    found: self.current().clone().kind,
+                });
             }
 
-            return Ok(Stmt::IfElse { if_arm: Box::new(Stmt::If { stmt, body }), else_arm }) 
+            return Ok(Stmt::IfElse {
+                if_arm: Box::new(Stmt::If { stmt, body }),
+                else_arm,
+            });
         }
 
-        Ok(Stmt::If { stmt, body }) 
+        Ok(Stmt::If { stmt, body })
     }
 
     fn parse_stmt(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
@@ -226,9 +294,9 @@ impl<'src> Parser<'src> {
                         Expr::Op { op: "if" } => return self.parse_if_stmt(stmt),
                         _ => (),
                     };
-                },
+                }
 
-                _ => ()
+                _ => (),
             };
 
             Ok(Stmt::Expr { expr: stmt })
@@ -317,7 +385,8 @@ mod tests {
                         },
                     ]
                 },
-            ]));
+            ])
+        );
     }
 
     #[test]
@@ -363,7 +432,8 @@ mod tests {
                             }
                         },
                     ]
-                    },
-            ]));
+                },
+            ])
+        );
     }
 }

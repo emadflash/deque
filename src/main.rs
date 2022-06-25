@@ -1,5 +1,5 @@
+use deque::env::{eval, Env};
 use std::{env, error::Error, fs};
-use deque::env::{Env, eval};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = env::args().skip(1).collect::<Vec<_>>();

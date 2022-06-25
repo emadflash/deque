@@ -24,63 +24,55 @@ pub fn eval<'src>(env: &mut Env, src: &'src str) -> anyhow::Result<()> {
         match &stmts[ip] {
             Stmt::Expr { expr } => {
                 match expr {
-                    Expr::PushLeft { expr } => {
-                        match **expr {
-                            Expr::Number { num } => env.deque.push_front(num),
-                            Expr::Op { op } => {
-                                match op {
-                                    "add" => {
-                                        let a = env.deque.pop_front().unwrap();
-                                        let b = env.deque.pop_front().unwrap();
-                                        env.deque.push_front(b + a);
-                                    }
-                                    "sub" => {
-                                        let a = env.deque.pop_front().unwrap();
-                                        let b = env.deque.pop_front().unwrap();
-                                        env.deque.push_front(b - a);
-                                    }
-                                    "dup" => {
-                                        let dup = env.deque.front().unwrap();
-                                        env.deque.push_front(dup.clone());
-                                    }
-                                    "print" => {
-                                        let dup = env.deque.front().unwrap();
-                                        print!("{}", dup);
-                                    }
-                                    _ => unreachable!(),
-                                }
+                    Expr::PushLeft { expr } => match **expr {
+                        Expr::Number { num } => env.deque.push_front(num),
+                        Expr::Op { op } => match op {
+                            "add" => {
+                                let a = env.deque.pop_front().unwrap();
+                                let b = env.deque.pop_front().unwrap();
+                                env.deque.push_front(b + a);
+                            }
+                            "sub" => {
+                                let a = env.deque.pop_front().unwrap();
+                                let b = env.deque.pop_front().unwrap();
+                                env.deque.push_front(b - a);
+                            }
+                            "dup" => {
+                                let dup = env.deque.front().unwrap();
+                                env.deque.push_front(dup.clone());
+                            }
+                            "print" => {
+                                let dup = env.deque.front().unwrap();
+                                print!("{}", dup);
                             }
                             _ => unreachable!(),
-                        }
-                    }
+                        },
+                        _ => unreachable!(),
+                    },
 
-                    Expr::PushRight { expr } => {
-                        match **expr {
-                            Expr::Number { num } => env.deque.push_back(num),
-                            Expr::Op { op } => {
-                                match op {
-                                    "add" => {
-                                        let a = env.deque.pop_back().unwrap();
-                                        let b = env.deque.pop_back().unwrap();
-                                        env.deque.push_back(b + a);
-                                    }
-                                    "sub" => {
-                                        let a = env.deque.pop_back().unwrap();
-                                        let b = env.deque.pop_back().unwrap();
-                                        env.deque.push_back(b - a);
-                                    }
-                                    "dup" => {
-                                        let dup = env.deque.back().unwrap();
-                                        env.deque.push_back(dup.clone());
-                                    }
-                                    _ => unreachable!(),
-                                }
+                    Expr::PushRight { expr } => match **expr {
+                        Expr::Number { num } => env.deque.push_back(num),
+                        Expr::Op { op } => match op {
+                            "add" => {
+                                let a = env.deque.pop_back().unwrap();
+                                let b = env.deque.pop_back().unwrap();
+                                env.deque.push_back(b + a);
+                            }
+                            "sub" => {
+                                let a = env.deque.pop_back().unwrap();
+                                let b = env.deque.pop_back().unwrap();
+                                env.deque.push_back(b - a);
+                            }
+                            "dup" => {
+                                let dup = env.deque.back().unwrap();
+                                env.deque.push_back(dup.clone());
                             }
                             _ => unreachable!(),
-                        }
-                    }
+                        },
+                        _ => unreachable!(),
+                    },
 
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 };
             }
 

@@ -103,7 +103,6 @@ pub(crate) fn lex<'src>(s: &'src str) -> anyhow::Result<Vec<Token<'src>>, LexerE
                 }
             }
 
-
             // --------------------------------------------------------------------------
             //                          - Change line -
             // --------------------------------------------------------------------------
@@ -139,12 +138,7 @@ pub(crate) fn lex<'src>(s: &'src str) -> anyhow::Result<Vec<Token<'src>>, LexerE
                     return Err(LexerError::MissingEndOfStringQuote);
                 }
 
-                tokens.push(
-                    TokenKind::String {
-                        text: &s[index..end],
-                    }
-                    .to_token((row, col)),
-                );
+                tokens.push(TokenKind::String { text: &s[index..end] }.to_token((row, col)));
                 col += end - index + 3;
             }
 
@@ -236,13 +230,7 @@ mod tests {
                 Token::new(TokenKind::Sym { sym: "!" }, (0, 5)),
                 Token::new(TokenKind::Keyword { kw: "sub" }, (0, 6)),
                 Token::new(TokenKind::Sym { sym: "!" }, (0, 10)),
-                Token::new(
-                    TokenKind::Number {
-                        text: "2",
-                        num: 2.0
-                    },
-                    (0, 11)
-                ),
+                Token::new(TokenKind::Number { text: "2", num: 2.0 }, (0, 11)),
                 Token::new(TokenKind::Eof, (0, 12))
             ])
         );
