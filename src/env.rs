@@ -1,13 +1,13 @@
 use crate::parser::{Expr, ParseError, Parser, Stmt};
 use std::collections::{HashMap, VecDeque};
 
-struct Env {
+pub struct Env {
     labels: HashMap<String, usize>,
-    deque: VecDeque<f32>,
+    pub deque: VecDeque<f32>,
 }
 
 impl Env {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             labels: HashMap::new(),
             deque: VecDeque::new(),
@@ -15,7 +15,7 @@ impl Env {
     }
 }
 
-fn eval<'src>(env: &mut Env, src: &'src str) -> anyhow::Result<()> {
+pub fn eval<'src>(env: &mut Env, src: &'src str) -> anyhow::Result<()> {
     let mut parser = Parser::from(&src).unwrap();
     let stmts = parser.parse().unwrap();
     let mut ip = 0;
