@@ -55,6 +55,11 @@ pub(crate) enum Stmt<'src> {
         if_arm: Box<Stmt<'src>>,
         else_arm: Vec<Stmt<'src>>,
     },
+    While {
+        main: Expr<'src>,
+        condition: Vec<Expr<'src>>,
+        body: Vec<Stmt<'src>>,
+    },
     Label {
         name: &'src str,
     },
@@ -145,7 +150,7 @@ impl<'src> Parser<'src> {
                     }),
 
                     TokenKind::Keyword { kw } => match &kw {
-                        &"add" | &"sub" | &"dup" | &"print" | &"if" => Ok(Expr::PushLeft {
+                        &"add" | &"sub" | &"dup" | &"print" | &"if" | &"while" => Ok(Expr::PushLeft {
                             expr: Box::new(Expr::Op { op: kw }),
                         }),
                         _ => unreachable!(),
@@ -158,7 +163,7 @@ impl<'src> Parser<'src> {
             },
 
             TokenKind::Keyword { kw } => match &kw {
-                &"add" | &"sub" | &"dup" | &"print" | &"if" => match self.next() {
+                &"add" | &"sub" | &"dup" | &"print" | &"if" | &"while" => match self.next() {
                     Some(op) => match op.kind {
                         TokenKind::Sym { sym: "!" } => Ok(Expr::PushRight {
                             expr: Box::new(Expr::Op { op: kw }),
@@ -282,6 +287,86 @@ impl<'src> Parser<'src> {
         Ok(Stmt::If { stmt, body })
     }
 
+    fn parse_while_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
+        assert!(
+            matches!(
+                self.current(),
+                Token {
+                    kind: TokenKind::Keyword { kw: "while" },
+                    ..
+                }
+            ) || matches!(
+                self.current(),
+                Token {
+                    kind: TokenKind::Sym { sym: "!" },
+                    ..
+                }
+            )
+        );
+
+        let mut condition: Vec<Expr<'src>> = Vec::new();
+        let mut body: Vec<Stmt<'src>> = Vec::new();
+
+        while let Some(tok) = self.next() {
+            if matches!(
+                tok,
+                Token {
+                    kind: TokenKind::Sym { sym: "{" },
+                    ..
+                }
+            ) {
+                break;
+            }
+            condition.push(self.parse_expr()?);
+        }
+
+        if !matches!(
+            self.current(),
+            Token {
+                kind: TokenKind::Sym { sym: "{" },
+                ..
+            }
+        ) {
+            return Err(ParseError::InvaildTokenKind {
+                expected: TokenKind::Sym { sym: "{" },
+                found: self.current().clone().kind,
+            });
+        }
+
+        while let Some(tok) = self.next() {
+            if matches!(
+                tok,
+                Token {
+                    kind: TokenKind::Sym { sym: "}" },
+                    ..
+                }
+            ) {
+                break;
+            } else {
+                body.push(self.parse_stmt()?);
+            }
+        }
+
+        if !matches!(
+            self.current(),
+            Token {
+                kind: TokenKind::Sym { sym: "}" },
+                ..
+            }
+        ) {
+            return Err(ParseError::InvaildTokenKind {
+                expected: TokenKind::Sym { sym: "}" },
+                found: self.current().clone().kind,
+            });
+        }
+
+        Ok(Stmt::While {
+            main,
+            condition,
+            body,
+        })
+    }
+
     fn parse_stmt(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
         if let Some(name) = self.skip_label_if_any() {
             Ok(Stmt::Label { name })
@@ -292,6 +377,7 @@ impl<'src> Parser<'src> {
                 Expr::PushLeft { ref expr } | Expr::PushRight { ref expr } => {
                     match **expr {
                         Expr::Op { op: "if" } => return self.parse_if_stmt(stmt),
+                        Expr::Op { op: "while" } => return self.parse_while_stmt(stmt),
                         _ => (),
                     };
                 }
@@ -434,6 +520,28 @@ mod tests {
                     ]
                 },
             ])
+        );
+    }
+
+    #[test]
+    fn parse_while_block() {
+        let text: &str = "!while !dup { !1 }";
+        let mut parser = Parser::from(text).unwrap();
+        assert_eq!(
+            parser.parse(),
+            Ok(vec![Stmt::While {
+                main: Expr::PushLeft {
+                    expr: Box::new(Expr::Op { op: "while" }),
+                },
+                condition: vec![Expr::PushLeft {
+                    expr: Box::new(Expr::Op { op: "dup" }),
+                },],
+                body: vec![Stmt::Expr {
+                    expr: Expr::PushLeft {
+                        expr: Box::new(Expr::Number { num: 1.0 }),
+                    },
+                }],
+            }])
         );
     }
 }
