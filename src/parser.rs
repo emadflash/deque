@@ -150,7 +150,7 @@ impl<'src> Parser<'src> {
                     }),
 
                     TokenKind::Keyword { kw } => match &kw {
-                        &"dup" | &"drop" | &"print" | &"if" | &"while" | &"eq" => {
+                        &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"while" | &"eq" => {
                             Ok(Expr::PushLeft {
                                 expr: Box::new(Expr::Op { op: kw }),
                             })
@@ -159,7 +159,7 @@ impl<'src> Parser<'src> {
                     },
 
                     TokenKind::Sym { sym } => match &sym {
-                        &"+" | &"-" | &"<" | &">" => Ok(Expr::PushLeft {
+                        &"+" | &"-" | &"%" | &"<" | &">" => Ok(Expr::PushLeft {
                             expr: Box::new(Expr::Op { op: sym }),
                         }),
                         _ => unreachable!(),
@@ -172,22 +172,23 @@ impl<'src> Parser<'src> {
             },
 
             TokenKind::Keyword { kw } => match &kw {
-                &"dup" | &"drop" | &"print" | &"if" | &"while" | &"eq" => match self.next()
-                {
-                    Some(op) => match op.kind {
-                        TokenKind::Sym { sym: "!" } => Ok(Expr::PushRight {
-                            expr: Box::new(Expr::Op { op: kw }),
-                        }),
+                &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"while" | &"eq" => {
+                    match self.next() {
+                        Some(op) => match op.kind {
+                            TokenKind::Sym { sym: "!" } => Ok(Expr::PushRight {
+                                expr: Box::new(Expr::Op { op: kw }),
+                            }),
 
-                        _ => Err(ParseError::InvaildOpKind { found: op.clone() }),
-                    },
-                    None => Err(ParseError::MissingOp),
-                },
+                            _ => Err(ParseError::InvaildOpKind { found: op.clone() }),
+                        },
+                        None => Err(ParseError::MissingOp),
+                    }
+                }
                 _ => unreachable!(),
             },
 
             TokenKind::Sym { sym } => match &sym {
-                &"+" | &"-" | &"<" | &">" => match self.next() {
+                &"+" | &"-" | &"%" | &"<" | &">" => match self.next() {
                     Some(op) => match op.kind {
                         TokenKind::Sym { sym: "!" } => Ok(Expr::PushRight {
                             expr: Box::new(Expr::Op { op: sym }),

@@ -15,7 +15,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let src = fs::read_to_string(&args[0])?;
     eval.eval(&src).unwrap();
-    eprintln!("{:?}", env.deque);
 
     Ok(())
 }

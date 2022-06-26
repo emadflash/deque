@@ -5,8 +5,8 @@ use thiserror::Error;
 pub(crate) enum LexerError {
     #[error("missing ending quotes")]
     MissingEndOfStringQuote,
-    #[error("unknown character error")]
-    UnknowCharacter(char),
+    #[error("unknown character error: {ch:?}")]
+    UnknowCharacter { ch: char },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -97,7 +97,6 @@ pub(crate) fn lex<'src>(s: &'src str) -> anyhow::Result<Vec<Token<'src>>, LexerE
                         .to_token((row, col)),
                     );
                 }
-
             }
 
             // --------------------------------------------------------------------------
@@ -165,7 +164,7 @@ pub(crate) fn lex<'src>(s: &'src str) -> anyhow::Result<Vec<Token<'src>>, LexerE
             // --------------------------------------------------------------------------
             //                          - Sym -
             // --------------------------------------------------------------------------
-            '!' | ':' | '{' | '}' | '+' | '>' | '<' => {
+            '!' | ':' | '{' | '}' | '+' | '%' | '>' | '<' => {
                 tokens.push(
                     TokenKind::Sym {
                         sym: &s[index..index + 1],
@@ -173,46 +172,6 @@ pub(crate) fn lex<'src>(s: &'src str) -> anyhow::Result<Vec<Token<'src>>, LexerE
                     .to_token((row, col)),
                 );
             }
-
-            //'>' => {
-                //let mut end = index;
-                //if let Some((_, a)) = it.peek() {
-                    //match a {
-                        //'=' | '>' => {
-                            //end += 1;
-                            //it.next();
-                        //}
-                        //_ => break,
-                    //}
-                //}
-
-                //tokens.push(
-                    //TokenKind::Sym {
-                        //sym: &s[index..end],
-                    //}
-                    //.to_token((row, col)),
-                //);
-            //}
-
-            //'<' => {
-                //let mut end = index;
-                //if let Some((_, a)) = it.peek() {
-                    //match a {
-                        //'=' | '<' => {
-                            //end += 1;
-                            //it.next();
-                        //}
-                        //_ => break,
-                    //}
-                //}
-
-                //tokens.push(
-                    //TokenKind::Sym {
-                        //sym: &s[index..=end],
-                    //}
-                    //.to_token((row, col)),
-                //);
-            //}
 
             // --------------------------------------------------------------------------
             //                          - Iden or Keyword -
@@ -233,16 +192,15 @@ pub(crate) fn lex<'src>(s: &'src str) -> anyhow::Result<Vec<Token<'src>>, LexerE
 
                 let text = &s[index..=end];
                 match text {
-                    "dup" | "drop" | "print" | "if" | "elif" | "else" | "while" | "eq" => {
-                        tokens.push(TokenKind::Keyword { kw: text }.to_token((row, col)))
-                    }
+                    "dup" | "pud" | "drop" | "print" | "println" | "if" | "elif" | "else" | "while"
+                    | "eq" => tokens.push(TokenKind::Keyword { kw: text }.to_token((row, col))),
                     _ => tokens.push(TokenKind::Iden { iden: text }.to_token((row, col))),
                 };
 
                 col += end - index;
             }
 
-            _ => return Err(LexerError::UnknowCharacter(ch)),
+            _ => return Err(LexerError::UnknowCharacter { ch }),
         };
 
         col += 1;

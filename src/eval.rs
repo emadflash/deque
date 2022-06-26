@@ -20,12 +20,20 @@ impl<'a, 'src> Eval<'a> {
                         let dup = self.env.deque.front().unwrap();
                         self.env.deque.push_front(dup.clone());
                     }
+                    "pud" => {
+                        let dup = self.env.deque.front().unwrap();
+                        self.env.deque.push_back(dup.clone());
+                    }
                     "drop" => {
                         let _ = self.env.deque.pop_front().unwrap();
                     }
                     "print" => {
                         let dup = self.env.deque.front().unwrap();
                         print!("{}", dup);
+                    }
+                    "println" => {
+                        let dup = self.env.deque.front().unwrap();
+                        println!("{}", dup);
                     }
 
                     // --------------------------------------------------------------------------
@@ -40,6 +48,11 @@ impl<'a, 'src> Eval<'a> {
                         let a = self.env.deque.pop_front().unwrap();
                         let b = self.env.deque.pop_front().unwrap();
                         self.env.deque.push_front(b - a);
+                    }
+                    "%" => {
+                        let a = self.env.deque.pop_front().unwrap();
+                        let b = self.env.deque.pop_front().unwrap();
+                        self.env.deque.push_front(b % a);
                     }
 
                     // --------------------------------------------------------------------------
@@ -88,8 +101,16 @@ impl<'a, 'src> Eval<'a> {
                         let dup = self.env.deque.back().unwrap();
                         self.env.deque.push_back(dup.clone());
                     }
+                    "pud" => {
+                        let dup = self.env.deque.back().unwrap();
+                        self.env.deque.push_front(dup.clone());
+                    }
                     "drop" => {
                         let _ = self.env.deque.pop_back().unwrap();
+                    }
+                    "println" => {
+                        let dup = self.env.deque.back().unwrap();
+                        println!("{}", dup);
                     }
 
                     // --------------------------------------------------------------------------
@@ -104,6 +125,11 @@ impl<'a, 'src> Eval<'a> {
                         let a = self.env.deque.pop_back().unwrap();
                         let b = self.env.deque.pop_back().unwrap();
                         self.env.deque.push_back(b - a);
+                    }
+                    "%" => {
+                        let a = self.env.deque.pop_back().unwrap();
+                        let b = self.env.deque.pop_back().unwrap();
+                        self.env.deque.push_back(b % a);
                     }
 
                     // --------------------------------------------------------------------------
@@ -154,8 +180,10 @@ impl<'a, 'src> Eval<'a> {
         let mut flag = false;
 
         if matches!(main, Expr::PushLeft { .. }) {
-            if self.env.deque.pop_back().unwrap() == 1.0 {
+            if self.env.deque.pop_front().unwrap() == 1.0 {
                 flag = true;
+
+                //  B O D Y
                 for stmt_ in body {
                     self.eval_stmt(&stmt_);
                 }
@@ -163,6 +191,8 @@ impl<'a, 'src> Eval<'a> {
         } else {
             if self.env.deque.pop_back().unwrap() == 1.0 {
                 flag = true;
+
+                //  B O D Y
                 for stmt_ in body {
                     self.eval_stmt(&stmt_);
                 }
