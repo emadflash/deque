@@ -168,7 +168,7 @@ pub(crate) fn lex<'src>(s: &'src str) -> anyhow::Result<Vec<Token<'src>>, LexerE
             // --------------------------------------------------------------------------
             //                          - Sym -
             // --------------------------------------------------------------------------
-            '!' | ':' | '{' | '}' => {
+            '!' | ':' | '{' | '}' | '<' | '>' => {
                 tokens.push(
                     TokenKind::Sym {
                         sym: &s[index..index + 1],
@@ -196,7 +196,7 @@ pub(crate) fn lex<'src>(s: &'src str) -> anyhow::Result<Vec<Token<'src>>, LexerE
 
                 let text = &s[index..=end];
                 match text {
-                    "add" | "sub" | "dup" | "print" | "if" | "elif" | "else" | "while" => {
+                    "add" | "sub" | "dup" | "drop" | "print" | "if" | "elif" | "else" | "while" | "eq" => {
                         tokens.push(TokenKind::Keyword { kw: text }.to_token((row, col)))
                     }
                     _ => tokens.push(TokenKind::Iden { iden: text }.to_token((row, col))),

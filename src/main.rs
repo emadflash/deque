@@ -1,4 +1,5 @@
-use deque::env::{eval, Env};
+use deque::env::Env;
+use deque::eval::Eval;
 use std::{env, error::Error, fs};
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -10,9 +11,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let mut env = Env::new();
-    let src = fs::read_to_string(&args[0])?;
+    let mut eval = Eval::new(&mut env);
 
-    eval(&mut env, &src).unwrap();
+    let src = fs::read_to_string(&args[0])?;
+    eval.eval(&src).unwrap();
     eprintln!("{:?}", env.deque);
 
     Ok(())
