@@ -150,7 +150,7 @@ impl<'src> Parser<'src> {
                     }),
 
                     TokenKind::Keyword { kw } => match &kw {
-                        &"add" | &"sub" | &"dup" | &"drop" | &"print" | &"if" | &"while" | &"eq" => {
+                        &"dup" | &"drop" | &"print" | &"if" | &"while" | &"eq" => {
                             Ok(Expr::PushLeft {
                                 expr: Box::new(Expr::Op { op: kw }),
                             })
@@ -159,7 +159,7 @@ impl<'src> Parser<'src> {
                     },
 
                     TokenKind::Sym { sym } => match &sym {
-                        &"<" | &">" => Ok(Expr::PushLeft {
+                        &"+" | &"-" | &"<" | &">" => Ok(Expr::PushLeft {
                             expr: Box::new(Expr::Op { op: sym }),
                         }),
                         _ => unreachable!(),
@@ -172,7 +172,7 @@ impl<'src> Parser<'src> {
             },
 
             TokenKind::Keyword { kw } => match &kw {
-                &"add" | &"sub" | &"dup" | &"drop" | &"print" | &"if" | &"while" | &"eq" => match self.next()
+                &"dup" | &"drop" | &"print" | &"if" | &"while" | &"eq" => match self.next()
                 {
                     Some(op) => match op.kind {
                         TokenKind::Sym { sym: "!" } => Ok(Expr::PushRight {
@@ -187,7 +187,7 @@ impl<'src> Parser<'src> {
             },
 
             TokenKind::Sym { sym } => match &sym {
-                &"<" | &">" => match self.next() {
+                &"+" | &"-" | &"<" | &">" => match self.next() {
                     Some(op) => match op.kind {
                         TokenKind::Sym { sym: "!" } => Ok(Expr::PushRight {
                             expr: Box::new(Expr::Op { op: sym }),
@@ -430,19 +430,19 @@ mod tests {
 
     #[test]
     fn _parse() {
-        let text: &str = "!add !sub !2 loop: !sub end: dup! !> <!";
+        let text: &str = "!+ !- !2 loop: !- end: dup! !> <!";
         let mut parser = Parser::from(text).unwrap();
         assert_eq!(
             parser.parse(),
             Ok(vec![
                 Stmt::Expr {
                     expr: Expr::PushLeft {
-                        expr: Box::new(Expr::Op { op: "add" })
+                        expr: Box::new(Expr::Op { op: "+" })
                     }
                 },
                 Stmt::Expr {
                     expr: Expr::PushLeft {
-                        expr: Box::new(Expr::Op { op: "sub" })
+                        expr: Box::new(Expr::Op { op: "-" })
                     }
                 },
                 Stmt::Expr {
@@ -453,7 +453,7 @@ mod tests {
                 Stmt::Label { name: "loop" },
                 Stmt::Expr {
                     expr: Expr::PushLeft {
-                        expr: Box::new(Expr::Op { op: "sub" })
+                        expr: Box::new(Expr::Op { op: "-" })
                     }
                 },
                 Stmt::Label { name: "end" },

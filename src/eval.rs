@@ -31,12 +31,12 @@ impl<'a, 'src> Eval<'a> {
                     // --------------------------------------------------------------------------
                     //                          - Arithmetic -
                     // --------------------------------------------------------------------------
-                    "add" => {
+                    "+" => {
                         let a = self.env.deque.pop_front().unwrap();
                         let b = self.env.deque.pop_front().unwrap();
                         self.env.deque.push_front(b + a);
                     }
-                    "sub" => {
+                    "-" => {
                         let a = self.env.deque.pop_front().unwrap();
                         let b = self.env.deque.pop_front().unwrap();
                         self.env.deque.push_front(b - a);
@@ -95,12 +95,12 @@ impl<'a, 'src> Eval<'a> {
                     // --------------------------------------------------------------------------
                     //                          - Arithmetic -
                     // --------------------------------------------------------------------------
-                    "add" => {
+                    "+" => {
                         let a = self.env.deque.pop_back().unwrap();
                         let b = self.env.deque.pop_back().unwrap();
                         self.env.deque.push_back(b + a);
                     }
-                    "sub" => {
+                    "-" => {
                         let a = self.env.deque.pop_back().unwrap();
                         let b = self.env.deque.pop_back().unwrap();
                         self.env.deque.push_back(b - a);
@@ -242,7 +242,7 @@ mod tests {
     fn eval_arithmetic() {
         let mut env = Env::new();
         let mut eval = Eval::new(&mut env);
-        assert!(eval.eval("!1 !2 !add !print").is_ok());
+        assert!(eval.eval("!1 !2 !+ !print").is_ok());
         assert_eq!(env.deque, VecDeque::from([3.0]));
     }
 
@@ -250,7 +250,7 @@ mod tests {
     fn eval_if_stmt() {
         let mut env = Env::new();
         let mut eval = Eval::new(&mut env);
-        assert!(eval.eval("!1 !if { !1 !2 !add }").is_ok());
+        assert!(eval.eval("!1 !if { !1 !2 !+ }").is_ok());
         assert_eq!(env.deque, VecDeque::from([3.0]));
     }
 
@@ -258,7 +258,7 @@ mod tests {
     fn eval_if_else_stmt() {
         let mut env = Env::new();
         let mut eval = Eval::new(&mut env);
-        assert!(eval.eval("!0 !if { !1 !2 !add } else { !2 !1 !sub }").is_ok());
+        assert!(eval.eval("!0 !if { !1 !2 !+ } else { !2 !1 !- }").is_ok());
         assert_eq!(env.deque, VecDeque::from([1.0]));
     }
 
@@ -272,7 +272,7 @@ mod tests {
                 "
 !1
 !while !dup !10 !> {
-    !dup !1 !add
+    !dup !1 !+
 }
 "
             )

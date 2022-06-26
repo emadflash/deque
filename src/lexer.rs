@@ -29,26 +29,11 @@ impl<'src> Token<'src> {
     fn new(kind: TokenKind<'src>, pos: (usize, usize)) -> Self {
         Self { kind, pos }
     }
-
-    pub(crate) fn to_string(&self) -> String {
-        self.kind.to_string()
-    }
 }
 
 impl<'src> TokenKind<'src> {
     fn to_token(self, pos: (usize, usize)) -> Token<'src> {
         Token::new(self, pos)
-    }
-
-    fn to_string(&self) -> String {
-        match self {
-            TokenKind::Sym { sym } => sym.to_string(),
-            TokenKind::Iden { iden } => iden.to_string(),
-            TokenKind::Keyword { kw } => kw.to_string(),
-            TokenKind::Number { text, .. } => text.to_string(),
-            TokenKind::String { text } => text.to_string(),
-            TokenKind::Eof => "EOF".to_string(),
-        }
     }
 }
 
@@ -100,7 +85,19 @@ pub(crate) fn lex<'src>(s: &'src str) -> anyhow::Result<Vec<Token<'src>>, LexerE
                         col += 1;
                         it.next();
                     }
+                } else {
+                    // --------------------------------------------------------------------------
+                    //                          - Minus -
+                    // --------------------------------------------------------------------------
+
+                    tokens.push(
+                        TokenKind::Sym {
+                            sym: &s[index..index + 1],
+                        }
+                        .to_token((row, col)),
+                    );
                 }
+
             }
 
             // --------------------------------------------------------------------------
@@ -168,7 +165,7 @@ pub(crate) fn lex<'src>(s: &'src str) -> anyhow::Result<Vec<Token<'src>>, LexerE
             // --------------------------------------------------------------------------
             //                          - Sym -
             // --------------------------------------------------------------------------
-            '!' | ':' | '{' | '}' | '<' | '>' => {
+            '!' | ':' | '{' | '}' | '+' | '>' | '<' => {
                 tokens.push(
                     TokenKind::Sym {
                         sym: &s[index..index + 1],
@@ -176,6 +173,46 @@ pub(crate) fn lex<'src>(s: &'src str) -> anyhow::Result<Vec<Token<'src>>, LexerE
                     .to_token((row, col)),
                 );
             }
+
+            //'>' => {
+                //let mut end = index;
+                //if let Some((_, a)) = it.peek() {
+                    //match a {
+                        //'=' | '>' => {
+                            //end += 1;
+                            //it.next();
+                        //}
+                        //_ => break,
+                    //}
+                //}
+
+                //tokens.push(
+                    //TokenKind::Sym {
+                        //sym: &s[index..end],
+                    //}
+                    //.to_token((row, col)),
+                //);
+            //}
+
+            //'<' => {
+                //let mut end = index;
+                //if let Some((_, a)) = it.peek() {
+                    //match a {
+                        //'=' | '<' => {
+                            //end += 1;
+                            //it.next();
+                        //}
+                        //_ => break,
+                    //}
+                //}
+
+                //tokens.push(
+                    //TokenKind::Sym {
+                        //sym: &s[index..=end],
+                    //}
+                    //.to_token((row, col)),
+                //);
+            //}
 
             // --------------------------------------------------------------------------
             //                          - Iden or Keyword -
@@ -196,7 +233,7 @@ pub(crate) fn lex<'src>(s: &'src str) -> anyhow::Result<Vec<Token<'src>>, LexerE
 
                 let text = &s[index..=end];
                 match text {
-                    "add" | "sub" | "dup" | "drop" | "print" | "if" | "elif" | "else" | "while" | "eq" => {
+                    "dup" | "drop" | "print" | "if" | "elif" | "else" | "while" | "eq" => {
                         tokens.push(TokenKind::Keyword { kw: text }.to_token((row, col)))
                     }
                     _ => tokens.push(TokenKind::Iden { iden: text }.to_token((row, col))),
@@ -221,17 +258,19 @@ mod tests {
 
     #[test]
     fn lex_() {
-        let text: &str = "!add !sub !2";
+        let text: &str = "!+ !- !2 >!";
         assert_eq!(
             lex(&text),
             Ok(vec![
                 Token::new(TokenKind::Sym { sym: "!" }, (0, 0)),
-                Token::new(TokenKind::Keyword { kw: "add" }, (0, 1)),
-                Token::new(TokenKind::Sym { sym: "!" }, (0, 5)),
-                Token::new(TokenKind::Keyword { kw: "sub" }, (0, 6)),
+                Token::new(TokenKind::Sym { sym: "+" }, (0, 1)),
+                Token::new(TokenKind::Sym { sym: "!" }, (0, 3)),
+                Token::new(TokenKind::Sym { sym: "-" }, (0, 4)),
+                Token::new(TokenKind::Sym { sym: "!" }, (0, 6)),
+                Token::new(TokenKind::Number { text: "2", num: 2.0 }, (0, 7)),
+                Token::new(TokenKind::Sym { sym: ">" }, (0, 9)),
                 Token::new(TokenKind::Sym { sym: "!" }, (0, 10)),
-                Token::new(TokenKind::Number { text: "2", num: 2.0 }, (0, 11)),
-                Token::new(TokenKind::Eof, (0, 12))
+                Token::new(TokenKind::Eof, (0, 11))
             ])
         );
     }
