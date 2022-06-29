@@ -44,16 +44,16 @@ impl<'src> Display for Expr<'src> {
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum Stmt<'src> {
-    Expr {
-        expr: Expr<'src>,
-    },
+    Expr { expr: Expr<'src> },
+    Block { body: Vec<Stmt<'src>> },
     If {
         main: Expr<'src>,
-        body: Vec<Stmt<'src>>,
+        condition: Vec<Expr<'src>>,
+        body: Box<Stmt<'src>>,
     },
     IfElse {
-        if_block: Box<Stmt<'src>>,
-        else_block: Vec<Stmt<'src>>,
+        master: Box<Stmt<'src>>,
+        alternates: Vec<Stmt<'src>>,
     },
     While {
         main: Expr<'src>,
@@ -102,6 +102,16 @@ impl<'src> Parser<'src> {
         Some(tok)
     }
 
+    fn peekn(&self, n: usize) -> Option<&Token<'src>> {
+        assert_ne!(n, 0);
+        if self.curr + n - 1 >= self.tokens.len() - 1 {
+            return None;
+        }
+
+        let tok = &self.tokens[self.curr + n - 1];
+        Some(tok)
+    }
+
     fn eof(&self) -> &Token<'src> {
         assert_eq!(self.curr, self.tokens.len() - 1);
         &self.tokens[self.curr]
@@ -115,6 +125,18 @@ impl<'src> Parser<'src> {
                     found: tok.kind.clone(),
                 });
             }
+        }
+
+        self.next();
+        Ok(())
+    }
+
+    fn expect_current(&mut self, expected: &TokenKind<'src>) -> Result<(), ParseError<'src>> {
+        if !matches!(&self.current().kind, _expected) {
+            return Err(ParseError::InvaildTokenKind {
+                expected: expected.clone(),
+                found: self.current().kind.clone(),
+            });
         }
 
         self.next();
@@ -141,6 +163,9 @@ impl<'src> Parser<'src> {
         }
     }
 
+    // --------------------------------------------------------------------------
+    //                          - Expr -
+    // --------------------------------------------------------------------------
     fn parse_expr(&mut self) -> anyhow::Result<Expr<'src>, ParseError<'src>> {
         match self.current().kind {
             TokenKind::Sym { sym: "!" } => match self.next() {
@@ -150,7 +175,7 @@ impl<'src> Parser<'src> {
                     }),
 
                     TokenKind::Keyword { kw } => match &kw {
-                        &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"while" | &"eq" => {
+                        &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"elif" | &"while" | &"eq" => {
                             Ok(Expr::PushLeft {
                                 expr: Box::new(Expr::Op { op: kw }),
                             })
@@ -172,7 +197,7 @@ impl<'src> Parser<'src> {
             },
 
             TokenKind::Keyword { kw } => match &kw {
-                &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"while" | &"eq" => {
+                &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"elif" | &"while" | &"eq" => {
                     match self.next() {
                         Some(op) => match op.kind {
                             TokenKind::Sym { sym: "!" } => Ok(Expr::PushRight {
@@ -198,7 +223,7 @@ impl<'src> Parser<'src> {
                     },
                     None => Err(ParseError::MissingOp),
                 },
-                _ => unreachable!(),
+                _ => unreachable!("{}", sym),
             },
 
             TokenKind::Number { num, .. } => match self.next() {
@@ -218,7 +243,42 @@ impl<'src> Parser<'src> {
         }
     }
 
-    fn parse_if_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
+    // --------------------------------------------------------------------------
+    //                          - Block -
+    // --------------------------------------------------------------------------
+    fn parse_block(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
+        assert!(matches!(self.current(), Token { kind: TokenKind::Sym { sym: "{" }, .. }));
+        let mut body: Vec<Stmt<'src>> = Vec::new();
+
+        while let Some(tok) = self.next() {
+            if matches!(tok, Token { kind: TokenKind::Sym { sym: "}" }, .. }) {
+                break;
+            }
+            body.push(self.parse_stmt()?);
+        }
+
+        self.expect_current(&TokenKind::Sym { sym: "}" })?;
+        Ok(Stmt::Block { body })
+    }
+
+    // --------------------------------------------------------------------------
+    //                          - If -
+    // --------------------------------------------------------------------------
+    fn is_elif_clause(&mut self) -> bool {
+        if matches!(self.current(), Token { kind: TokenKind::Sym { sym: "!" }, .. }) && 
+            matches!(self.peek(), Some(Token { kind: TokenKind::Keyword { kw: "elif" }, .. })) {
+                return true;
+        }
+
+        if matches!(self.current(), Token { kind: TokenKind::Sym { sym: "elif" }, .. }) && 
+            matches!(self.peek(), Some(Token { kind: TokenKind::Keyword { kw: "!" }, .. })) {
+                return true;
+        }
+
+        false
+    }
+
+    fn parse_if_block(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
         assert!(
             matches!(
                 self.current(),
@@ -232,84 +292,54 @@ impl<'src> Parser<'src> {
                     kind: TokenKind::Sym { sym: "!" },
                     ..
                 }
+            ) || matches!(
+                self.current(),
+                Token {
+                    kind: TokenKind::Keyword { kw: "elif" },
+                    ..
+                }
             )
         );
 
-        self.expect(&TokenKind::Sym { sym: "{" })?;
-        let mut body: Vec<Stmt<'src>> = Vec::new();
+        let mut condition: Vec<Expr<'src>> = Vec::new();
 
         while let Some(tok) = self.next() {
-            if matches!(
-                tok,
-                Token {
-                    kind: TokenKind::Sym { sym: "}" },
-                    ..
-                }
-            ) {
+            if matches!(tok, Token { kind: TokenKind::Sym { sym: "{" }, ..}) {
                 break;
-            } else {
-                body.push(self.parse_stmt()?);
             }
+            condition.push(self.parse_expr()?);
         }
 
-        if !matches!(
-            self.current(),
-            Token {
-                kind: TokenKind::Sym { sym: "}" },
-                ..
-            }
-        ) {
+        if !matches!(self.current(), Token { kind: TokenKind::Sym { sym: "{" }, .. }) {
             return Err(ParseError::InvaildTokenKind {
-                expected: TokenKind::Sym { sym: "}" },
+                expected: TokenKind::Sym { sym: "{" },
                 found: self.current().clone().kind,
             });
         }
 
-        if matches!(
-            self.peek(),
-            Some(&Token {
-                kind: TokenKind::Keyword { kw: "else" },
-                ..
-            })
-        ) {
-            self.next();
-            self.expect(&TokenKind::Sym { sym: "{" })?;
+        Ok(Stmt::If { main, condition, body: Box::new(self.parse_block()?) })
+    }
 
-            let mut else_block: Vec<Stmt<'src>> = Vec::new();
-            while let Some(tok) = self.next() {
-                if matches!(
-                    tok,
-                    Token {
-                        kind: TokenKind::Sym { sym: "}" },
-                        ..
-                    }
-                ) {
-                    break;
-                } else {
-                    else_block.push(self.parse_stmt()?);
-                }
-            }
+    fn parse_if_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
+        let master = self.parse_if_block(main)?;
+        let mut alternates: Vec<Stmt<'src>> = Vec::new();
 
-            if !matches!(
-                self.current(),
-                Token {
-                    kind: TokenKind::Sym { sym: "}" },
-                    ..
-                }
-            ) {
-                return Err(ParseError::InvaildTokenKind {
-                    expected: TokenKind::Sym { sym: "}" },
-                    found: self.current().clone().kind,
-                });
-            }
-
-            return Ok(Stmt::IfElse {
-                if_block: Box::new(Stmt::If { main, body }),
-                else_block,
-            });
+        while self.is_elif_clause() {
+            let main = self.parse_expr()?;
+            alternates.push(self.parse_if_block(main)?);
         }
 
-        Ok(Stmt::If { main, body })
+        if matches!(self.peek(), Some(&Token { kind: TokenKind::Keyword { kw: "else" }, .. })) {
+            self.next();
+            self.expect(&TokenKind::Sym { sym: "{" })?;
+            alternates.push(self.parse_block()?);
+        }
+
+
+        if alternates.is_empty() {
+            return Ok(master);
+        }
+        Ok(Stmt::IfElse { master: Box::new(master), alternates })
     }
 
     fn parse_while_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
@@ -430,7 +460,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn _parse() {
+    fn misc() {
         let text: &str = "!+ !- !2 loop: !- end: dup! !> <!";
         let mut parser = Parser::from(text).unwrap();
         assert_eq!(
@@ -478,55 +508,22 @@ mod tests {
     }
 
     #[test]
-    fn parse_if_block() {
-        let text: &str = "!1 !if { !1 !2 }";
+    fn parse_only_if_stmt() {
+        let text: &str = "!if !1 { !1 !2 }";
         let mut parser = Parser::from(text).unwrap();
         assert_eq!(
             parser.parse(),
             Ok(vec![
-                Stmt::Expr {
-                    expr: Expr::PushLeft {
-                        expr: Box::new(Expr::Number { num: 1.0 })
-                    }
-                },
                 Stmt::If {
                     main: Expr::PushLeft {
                         expr: Box::new(Expr::Op { op: "if" })
                     },
-                    body: vec![
-                        Stmt::Expr {
-                            expr: Expr::PushLeft {
-                                expr: Box::new(Expr::Number { num: 1.0 })
-                            }
-                        },
-                        Stmt::Expr {
-                            expr: Expr::PushLeft {
-                                expr: Box::new(Expr::Number { num: 2.0 })
-                            }
-                        },
-                    ]
-                },
-            ])
-        );
-    }
-
-    #[test]
-    fn parse_if_else_block() {
-        let text: &str = "!1 !if { !1 !2 } else { !2 !1 }";
-        let mut parser = Parser::from(text).unwrap();
-        assert_eq!(
-            parser.parse(),
-            Ok(vec![
-                Stmt::Expr {
-                    expr: Expr::PushLeft {
-                        expr: Box::new(Expr::Number { num: 1.0 })
-                    }
-                },
-                Stmt::IfElse {
-                    if_block: Box::new(Stmt::If {
-                        main: Expr::PushLeft {
-                            expr: Box::new(Expr::Op { op: "if" })
-                        },
+                    condition: vec![
+                         Expr::PushLeft {
+                             expr: Box::new(Expr::Number { num: 1.0 })
+                         }
+                    ],
+                    body: Box::new(Stmt::Block {
                         body: vec![
                             Stmt::Expr {
                                 expr: Expr::PushLeft {
@@ -539,24 +536,123 @@ mod tests {
                                 }
                             },
                         ]
-                    }),
-
-                    else_block: vec![
-                        Stmt::Expr {
-                            expr: Expr::PushLeft {
-                                expr: Box::new(Expr::Number { num: 2.0 })
-                            }
-                        },
-                        Stmt::Expr {
-                            expr: Expr::PushLeft {
-                                expr: Box::new(Expr::Number { num: 1.0 })
-                            }
-                        },
-                    ]
+                    })
                 },
             ])
         );
     }
+
+    #[test]
+    fn parse_if_elif_block() {
+        let text: &str = "!if !1 { } !elif !dup !> { } !elif dup! { 69! } !68";
+        let mut parser = Parser::from(text).unwrap();
+        assert_eq!(
+            parser.parse(),
+            Ok(vec![
+                Stmt::IfElse {
+                    master: Box::new(Stmt::If {
+                        main: Expr::PushLeft {
+                            expr: Box::new(Expr::Op { op: "if" })
+                        },
+                        condition: vec![
+                            Expr::PushLeft {
+                                expr: Box::new(Expr::Number { num: 1.0}),
+                            },
+                        ],
+                        body: Box::new(Stmt::Block {
+                            body: vec![]
+                        })
+                    }),
+                    alternates: vec![
+                        Stmt::If {
+                            main: Expr::PushLeft {
+                                expr: Box::new(Expr::Op { op: "elif" })
+                            },
+                            condition: vec![
+                                Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { op: "dup" }),
+                                },
+                                Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { op: ">" }),
+                                },
+                            ],
+                            body: Box::new(Stmt::Block { body: vec![] })
+                        },
+                        Stmt::If {
+                            main: Expr::PushLeft {
+                                expr: Box::new(Expr::Op { op: "elif" })
+                            },
+                            condition: vec![Expr::PushRight {
+                                expr: Box::new(Expr::Op { op: "dup" }),
+                            },],
+                            body: Box::new(Stmt::Block {
+                                body: vec![
+                                    Stmt::Expr {
+                                        expr: Expr::PushRight {
+                                            expr: Box::new(Expr::Number { num: 69.0 })
+                                        }
+                                    }
+                                ]
+                            })
+                        }
+                    ]
+                },
+                Stmt::Expr {
+                    expr: Expr::PushRight {
+                        expr: Box::new(Expr::Number { num: 68.0 })
+                    }
+                }
+            ])
+        );
+    }
+
+    //#[test]
+    //fn parse_if_else_block() {
+        //let text: &str = "!1 !if { !1 !2 } else { !2 !1 }";
+        //let mut parser = Parser::from(text).unwrap();
+        //assert_eq!(
+            //parser.parse(),
+            //Ok(vec![
+                //Stmt::Expr {
+                    //expr: Expr::PushLeft {
+                        //expr: Box::new(Expr::Number { num: 1.0 })
+                    //}
+                //},
+                //Stmt::IfElse {
+                    //if_block: Box::new(Stmt::If {
+                        //main: Expr::PushLeft {
+                            //expr: Box::new(Expr::Op { op: "if" })
+                        //},
+                        //body: vec![
+                            //Stmt::Expr {
+                                //expr: Expr::PushLeft {
+                                    //expr: Box::new(Expr::Number { num: 1.0 })
+                                //}
+                            //},
+                            //Stmt::Expr {
+                                //expr: Expr::PushLeft {
+                                    //expr: Box::new(Expr::Number { num: 2.0 })
+                                //}
+                            //},
+                        //]
+                    //}),
+
+                    //else_block: vec![
+                        //Stmt::Expr {
+                            //expr: Expr::PushLeft {
+                                //expr: Box::new(Expr::Number { num: 2.0 })
+                            //}
+                        //},
+                        //Stmt::Expr {
+                            //expr: Expr::PushLeft {
+                                //expr: Box::new(Expr::Number { num: 1.0 })
+                            //}
+                        //},
+                    //]
+                //},
+            //])
+        //);
+    //}
 
     #[test]
     fn parse_while_block() {

@@ -1,11 +1,11 @@
--- Prints first 25 even numbers 
+-- Prints first 25 even numbers
 
 !2
 
 !while !dup !25 !> {
     !dup !2 !%
 
-    !0 !eq !if {
+    !if !0 !eq {
         !println
     }
     

@@ -1,6 +1,7 @@
--- Print numbers from 0 to 10 (including 10) 
+-- Print numbers from 0 to 10 (including 10)
 
 !1 !println
+
 !while !dup !10 !> {
     !dup !1 !+
     !println
