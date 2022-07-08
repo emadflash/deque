@@ -1,4 +1,6 @@
 use std::fmt;
+use std::iter::Peekable;
+use std::str::CharIndices;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -9,6 +11,9 @@ pub(crate) enum LexerError {
     UnknowCharacter { ch: char },
 }
 
+// --------------------------------------------------------------------------
+//                          - TokenKind -
+// --------------------------------------------------------------------------
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum TokenKind<'src> {
     Sym { sym: &'src str },
@@ -19,6 +24,9 @@ pub(crate) enum TokenKind<'src> {
     Eof,
 }
 
+// --------------------------------------------------------------------------
+//                          - Token -
+// --------------------------------------------------------------------------
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Token<'src> {
     pub(crate) kind: TokenKind<'src>,
@@ -50,164 +58,197 @@ impl<'src> fmt::Display for TokenKind<'src> {
     }
 }
 
-pub(crate) fn lex<'src>(s: &'src str) -> anyhow::Result<Vec<Token<'src>>, LexerError> {
-    let mut row: usize = 0;
-    let mut col: usize = 0;
-    let mut tokens: Vec<Token<'src>> = Vec::new();
-    let mut it = s.char_indices().peekable();
+// --------------------------------------------------------------------------
+//                          - Lexer -
+// --------------------------------------------------------------------------
+#[derive(Debug)]
+pub(crate) struct Lexer<'src> {
+    row: usize,
+    col: usize,
+    is_finished: bool,
+    src: &'src str,
+    chars: Peekable<CharIndices<'src>>
+}
 
-    while let Some((index, ch)) = it.next() {
-        match ch {
-            // --------------------------------------------------------------------------
-            //                          - Whitespace -
-            // --------------------------------------------------------------------------
-            ' ' => {
-                while let Some((_, w)) = it.peek() {
-                    if !w.is_whitespace() {
-                        break;
-                    }
-
-                    col += 1;
-                    it.next();
-                }
-            }
-
-            // --------------------------------------------------------------------------
-            //                          - Comments -
-            // --------------------------------------------------------------------------
-            '-' => {
-                if matches!(it.peek(), Some(&(_, '-'))) {
-                    while let Some((_, w)) = it.peek() {
-                        if w == &'\n' {
-                            break;
-                        }
-
-                        col += 1;
-                        it.next();
-                    }
-                } else {
-                    // --------------------------------------------------------------------------
-                    //                          - Minus -
-                    // --------------------------------------------------------------------------
-
-                    tokens.push(
-                        TokenKind::Sym {
-                            sym: &s[index..index + 1],
-                        }
-                        .to_token((row, col)),
-                    );
-                }
-            }
-
-            // --------------------------------------------------------------------------
-            //                          - Change line -
-            // --------------------------------------------------------------------------
-            '\n' => {
-                col = 0;
-                row += 1;
-            }
-
-            // --------------------------------------------------------------------------
-            //                          - String -
-            // --------------------------------------------------------------------------
-            '"' => {
-                let mut success = false;
-                let index = index + 1;
-                let mut end = index;
-
-                while let Some((_, a)) = it.peek() {
-                    match a {
-                        '"' => {
-                            success = true;
-                            it.next();
-                            break;
-                        }
-
-                        _ => {
-                            end += 1;
-                            it.next();
-                        }
-                    };
-                }
-
-                if !success {
-                    return Err(LexerError::MissingEndOfStringQuote);
-                }
-
-                tokens.push(TokenKind::String { text: &s[index..end] }.to_token((row, col)));
-                col += end - index + 3;
-            }
-
-            // --------------------------------------------------------------------------
-            //                          - Number -
-            // --------------------------------------------------------------------------
-            '0'..='9' => {
-                let mut end = index;
-
-                while let Some((_, a)) = it.peek() {
-                    match a {
-                        '0'..='9' => {
-                            end += 1;
-                            it.next();
-                        }
-
-                        _ => break,
-                    };
-                }
-
-                let text = &s[index..=end];
-                let num = text.parse::<f32>().unwrap();
-                tokens.push(TokenKind::Number { text, num }.to_token((row, col)));
-                col += end - index;
-            }
-
-            // --------------------------------------------------------------------------
-            //                          - Sym -
-            // --------------------------------------------------------------------------
-            '!' | ':' | '{' | '}' | '+' | '%' | '>' | '<' => {
-                tokens.push(
-                    TokenKind::Sym {
-                        sym: &s[index..index + 1],
-                    }
-                    .to_token((row, col)),
-                );
-            }
-
-            // --------------------------------------------------------------------------
-            //                          - Iden or Keyword -
-            // --------------------------------------------------------------------------
-            'a'..='z' => {
-                let mut end = index;
-
-                while let Some((_, a)) = it.peek() {
-                    match a {
-                        'a'..='z' | '0'..='9' => {
-                            end += 1;
-                            it.next();
-                        }
-
-                        _ => break,
-                    };
-                }
-
-                let text = &s[index..=end];
-                match text {
-                    "dup" | "pud" | "drop" | "print" | "println" | "if" | "elif" | "else" | "while"
-                    | "eq" => tokens.push(TokenKind::Keyword { kw: text }.to_token((row, col))),
-                    _ => tokens.push(TokenKind::Iden { iden: text }.to_token((row, col))),
-                };
-
-                col += end - index;
-            }
-
-            _ => return Err(LexerError::UnknowCharacter { ch }),
-        };
-
-        col += 1;
+impl<'src> Lexer<'src> {
+    pub(crate) fn new(src: &'src str) -> Self {
+        let chars = src.char_indices().peekable();
+        Self {
+            row: 0,
+            col: 0,
+            is_finished: false,
+            src,
+            chars
+        }
     }
 
-    tokens.push(TokenKind::Eof.to_token((row, col)));
-    Ok(tokens)
+    pub(crate) fn next_token(&mut self) -> Result<Token<'src>, LexerError> {
+        assert!(!self.is_finished, "Lexer has already finished!");
+
+        while let Some((index, ch)) = self.chars.next() {
+            match ch {
+                // --------------------------------------------------------------------------
+                //                          - Whitespace -
+                // --------------------------------------------------------------------------
+                ' ' => {
+                    while let Some((_, w)) = self.chars.peek() {
+                        if !w.is_whitespace() {
+                            break;
+                        }
+
+                        self.col += 1;
+                        self.chars.next();
+                    }
+                }
+
+                // --------------------------------------------------------------------------
+                //                          - Comments -
+                // --------------------------------------------------------------------------
+                '-' => {
+                    if matches!(self.chars.peek(), Some(&(_, '-'))) {
+                        while let Some((_, w)) = self.chars.peek() {
+                            if w == &'\n' {
+                                break;
+                            }
+
+                            self.col += 1;
+                            self.chars.next();
+                        }
+                    } else {
+                        // --------------------------------------------------------------------------
+                        //                          - Minus -
+                        // --------------------------------------------------------------------------
+                        let tok = TokenKind::Sym {sym: &self.src[index..index + 1]}.to_token((self.row, self.col));
+                        self.col += 1;
+                        return Ok(tok);
+                    }
+                }
+
+                // --------------------------------------------------------------------------
+                //                          - Change line -
+                // --------------------------------------------------------------------------
+                '\n' => {
+                    self.col = 0;
+                    self.row += 1;
+                }
+
+                // --------------------------------------------------------------------------
+                //                          - String -
+                // --------------------------------------------------------------------------
+                '"' => {
+                    let mut success = false;
+                    let index = index + 1;
+                    let mut end = index;
+
+                    while let Some((_, a)) = self.chars.peek() {
+                        match a {
+                            '"' => {
+                                success = true;
+                                self.chars.next();
+                                break;
+                            }
+
+                            _ => {
+                                end += 1;
+                                self.chars.next();
+                            }
+                        };
+                    }
+
+                    if !success {
+                        return Err(LexerError::MissingEndOfStringQuote);
+                    }
+
+                    let tok = TokenKind::String { text: &self.src[index..end] }.to_token((self.row, self.col));
+                    self.col += end - index + 2;
+                    return Ok(tok);
+                }
+
+                // --------------------------------------------------------------------------
+                //                          - Number -
+                // --------------------------------------------------------------------------
+                '0'..='9' => {
+                    let mut end = index;
+
+                    while let Some((_, a)) = self.chars.peek() {
+                        match a {
+                            '0'..='9' => {
+                                end += 1;
+                                self.chars.next();
+                            }
+
+                            _ => break,
+                        };
+                    }
+
+                    let text = &self.src[index..=end];
+                    let num = text.parse::<f32>().unwrap();
+
+                    let tok = TokenKind::Number { text, num }.to_token((self.row, self.col));
+                    self.col += end - index + 1;
+                    return Ok(tok);
+                }
+
+                // --------------------------------------------------------------------------
+                //                          - Sym -
+                // --------------------------------------------------------------------------
+                '!' | ':' | '{' | '}' | '+' | '%' | '>' | '<' => {
+                    let tok = TokenKind::Sym {
+                        sym: &self.src[index..index + 1],
+                    }
+                    .to_token((self.row, self.col));
+                    self.col += 1;
+                    return Ok(tok);
+                }
+
+                // --------------------------------------------------------------------------
+                //                          - Iden or Keyword -
+                // --------------------------------------------------------------------------
+                'a'..='z' => {
+                    let mut end = index;
+
+                    while let Some((_, a)) = self.chars.peek() {
+                        match a {
+                            'a'..='z' | '0'..='9' => {
+                                end += 1;
+                                self.chars.next();
+                            }
+
+                            _ => break,
+                        };
+                    }
+
+                    let text = &self.src[index..=end];
+                    let tok = match text {
+                        "dup" | "pud" | "drop" | "print" | "println" | "if" | "elif" | "else" | "while"
+                        | "eq" => TokenKind::Keyword { kw: text }.to_token((self.row, self.col)),
+                        _ => TokenKind::Iden { iden: text }.to_token((self.row, self.col))
+                    };
+
+                    self.col += end - index;
+                    return Ok(tok);
+                }
+
+                _ => return Err(LexerError::UnknowCharacter { ch }),
+            };
+            self.col += 1;
+        }
+
+        self.is_finished = true;
+        Ok(TokenKind::Eof.to_token((self.row, self.col)))
+    }
+}
+
+impl<'src> Iterator for Lexer<'src> {
+    type Item = Result<Token<'src>, LexerError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.is_finished {
+            None
+        } else {
+            Some(self.next_token())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -215,11 +256,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn lex_() {
-        let text: &str = "!+ !- !2 >!";
+    fn lex_misc() {
+        let lexer = Lexer::new("!+ !- !2 >!");
+        let tokens = lexer.map(|tok| tok.unwrap()).collect::<Vec<_>>();
         assert_eq!(
-            lex(&text),
-            Ok(vec![
+            tokens,
+            vec![
                 Token::new(TokenKind::Sym { sym: "!" }, (0, 0)),
                 Token::new(TokenKind::Sym { sym: "+" }, (0, 1)),
                 Token::new(TokenKind::Sym { sym: "!" }, (0, 3)),
@@ -229,19 +271,21 @@ mod tests {
                 Token::new(TokenKind::Sym { sym: ">" }, (0, 9)),
                 Token::new(TokenKind::Sym { sym: "!" }, (0, 10)),
                 Token::new(TokenKind::Eof, (0, 11))
-            ])
+            ]
         );
     }
     #[test]
     fn lex_strings() {
-        let text: &str = "\"string 1\"   \"string 2\"";
+        let lexer = Lexer::new("\"string 1\"   \"string 2\" 69");
+        let tokens = lexer.map(|tok| tok.unwrap()).collect::<Vec<_>>();
         assert_eq!(
-            lex(&text),
-            Ok(vec![
+            tokens,
+            vec![
                 Token::new(TokenKind::String { text: "string 1" }, (0, 0)),
-                Token::new(TokenKind::String { text: "string 2" }, (0, 15)),
-                Token::new(TokenKind::Eof, (0, 27))
-            ])
+                Token::new(TokenKind::String { text: "string 2" }, (0, 13)),
+                Token::new(TokenKind::Number { text: "69", num: 69.0 }, (0, 24)),
+                Token::new(TokenKind::Eof, (0, 26))
+            ]
         );
     }
 }
