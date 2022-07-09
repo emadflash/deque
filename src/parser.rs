@@ -22,7 +22,7 @@ pub(crate) enum ParseError<'src> {
     },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Expr<'src> {
     Number { num: f32 },
     String { text: &'src str },
@@ -75,6 +75,19 @@ impl<'src> Parser<'src> {
         })
     }
 
+    pub(crate) fn match_next_token(&mut self, expected_kind: TokenKind<'src>) -> bool {
+        let tok = self.lexer.peek().expect("Token for peeking");
+        match tok {
+            Err(_) => false,
+            Ok(tok) => {
+                if tok.kind == expected_kind {
+                    return true;
+                }
+                false
+            }
+        }
+    }
+
     pub(crate) fn expect(&mut self, expected_kind: TokenKind<'src>) -> Result<(), ParseError<'src>> {
         let tok = self.lexer.peek().expect("Token for peeking");
         match tok {
@@ -104,7 +117,7 @@ impl<'src> Parser<'src> {
                     }),
 
                     TokenKind::Keyword { kw } => match &kw {
-                        &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"elif" | &"while" | &"eq" => {
+                        &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"while" | &"eq" => {
                             Ok(Expr::PushLeft {
                                 expr: Box::new(Expr::Op { op: kw }),
                             })
@@ -126,7 +139,7 @@ impl<'src> Parser<'src> {
             },
 
             TokenKind::Keyword { kw } => match &kw {
-                &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"elif" | &"while" | &"eq" => {
+                &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"while" | &"eq" => {
                     match self.lexer.next() {
                         Some(op) => match op.as_ref().unwrap().kind {
                             TokenKind::Sym { sym: "!" } => Ok(Expr::PushRight {
@@ -152,7 +165,7 @@ impl<'src> Parser<'src> {
                     },
                     None => Err(ParseError::MissingOp),
                 },
-                _ => unreachable!("this: {:?}", sym),
+                _ => unreachable!("this: {:?}", tok),
             },
 
             TokenKind::Number { num, .. } => match self.lexer.next() {
@@ -200,59 +213,51 @@ impl<'src> Parser<'src> {
     // --------------------------------------------------------------------------
     //                          - If -
     // --------------------------------------------------------------------------
-    //fn is_elif_start(&mut self) -> bool {
-        //if matches!(self.current(), Token { kind: TokenKind::Sym { sym: "!" }, .. }) && 
-            //matches!(self.peek(), Some(Token { kind: TokenKind::Keyword { kw: "elif" }, .. })) {
-                //return true;
-        //}
+    fn parse_if_block(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
+        let mut condition: Vec<Expr<'src>> = Vec::new();
 
-        //if matches!(self.current(), Token { kind: TokenKind::Sym { sym: "elif" }, .. }) && 
-            //matches!(self.peek(), Some(Token { kind: TokenKind::Keyword { kw: "!" }, .. })) {
-                //return true;
-        //}
+        while let Some(tok) = self.lexer.peek() {
+            match tok {
+                Err(e) => panic!("error: {:?}", e),
+                Ok(tok) => {
+                    if matches!(tok.kind, TokenKind::Sym { sym: "{" }) {
+                        break;
+                    }
+                    condition.push(self.parse_expr()?);
+                }
+            }
+        }
 
-        //false
-    //}
+        if condition.is_empty() {
+            panic!("expected condition in if stmt");
+        }
 
-    //fn parse_if_block(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
-        //let mut condition: Vec<Expr<'src>> = Vec::new();
+        Ok(Stmt::If { main, condition, body: Box::new(self.parse_body()?) })
+    }
 
-        //while let Some(tok) = self.next() {
-            //if matches!(tok, Token { kind: TokenKind::Sym { sym: "{" }, ..}) {
-                //break;
-            //}
-            //condition.push(self.parse_expr()?);
-        //}
+    fn parse_if_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
+        // NOTE(madflash) - master is the first if-stmt, and elif/else are alternates
+        let master = self.parse_if_block(main.clone())?;
+        let mut alternates: Vec<Stmt<'src>> = Vec::new();
 
-        //self.expect(&TokenKind::Sym { sym: "{" })?;
-        //Ok(Stmt::If { main, condition, body: Box::new(self.parse_body()?) })
-    //}
+        while self.match_next_token(TokenKind::Keyword { kw: "elif" }) {
+            self.lexer.next();
+            alternates.push(self.parse_if_block(main.clone())?);
+        }
 
-    //fn parse_if_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
-        //let master = self.parse_if_block(main)?;
-        //let mut alternates: Vec<Stmt<'src>> = Vec::new();
+        while self.match_next_token(TokenKind::Keyword { kw: "else" }) {
+            self.lexer.next();
+            alternates.push(self.parse_body()?);
+        }
 
-        //while self.is_elif_start() {
-            //let main = self.parse_expr()?;
-            //alternates.push(self.parse_if_block(main)?);
-            //self.next();
-        //}
-
-        //if matches!(self.peek(), Some(&Token { kind: TokenKind::Keyword { kw: "else" }, .. })) {
-            //self.next();
-            //self.next();
-            //alternates.push(self.parse_body()?);
-        //}
-
-        //if alternates.is_empty() {
-            //return Ok(master);
-        //}
-        //Ok(Stmt::IfElse { master: Box::new(master), alternates })
-    //}
+        if alternates.is_empty() {
+            return Ok(master);
+        }
+        Ok(Stmt::IfElse { master: Box::new(master), alternates })
+    }
 
     fn parse_while_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
         let mut condition: Vec<Expr<'src>> = Vec::new();
-        let mut body: Vec<Stmt<'src>> = Vec::new();
 
         while let Some(tok) = self.lexer.peek() {
             match tok {
@@ -279,7 +284,7 @@ impl<'src> Parser<'src> {
         match stmt {
             Expr::PushLeft { ref expr } | Expr::PushRight { ref expr } => {
                 match **expr {
-                    //Expr::Op { op: "if" } => return self.parse_if_stmt(stmt),
+                    Expr::Op { op: "if" } => return self.parse_if_stmt(stmt),
                     Expr::Op { op: "while" } => return self.parse_while_stmt(stmt),
                     _ => (),
                 };
@@ -361,7 +366,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_only_if_stmt() {
+    fn parse_if_stmt_with_no_branches() {
         let text: &str = "!if !1 { !1 !2 } !69";
         let mut parser = Parser::new(text).unwrap();
         assert_eq!(
@@ -402,7 +407,7 @@ mod tests {
 
     #[test]
     fn parse_if_elif_block() {
-        let text: &str = "!if !1 { } !elif !dup !> { } !elif dup! { 69! } !68";
+        let text: &str = "!if !1 { } elif !dup !> { } elif dup! { 69! } !eq";
         let mut parser = Parser::new(text).unwrap();
         assert_eq!(
             parser.parse(),
@@ -424,7 +429,7 @@ mod tests {
                     alternates: vec![
                         Stmt::If {
                             main: Expr::PushLeft {
-                                expr: Box::new(Expr::Op { op: "elif" })
+                                expr: Box::new(Expr::Op { op: "if" })
                             },
                             condition: vec![
                                 Expr::PushLeft {
@@ -438,7 +443,7 @@ mod tests {
                         },
                         Stmt::If {
                             main: Expr::PushLeft {
-                                expr: Box::new(Expr::Op { op: "elif" })
+                                expr: Box::new(Expr::Op { op: "if" })
                             },
                             condition: vec![Expr::PushRight {
                                 expr: Box::new(Expr::Op { op: "dup" }),
@@ -456,65 +461,72 @@ mod tests {
                     ]
                 },
                 Stmt::Expr {
-                    expr: Expr::PushRight {
-                        expr: Box::new(Expr::Number { num: 68.0 })
-                    }
+                    expr: Expr::PushLeft {
+                        expr: Box::new(Expr::Op { op: "eq" }),
+                    },
                 }
             ])
         );
     }
 
-    //#[test]
-    //fn parse_if_else_block() {
-        //let text: &str = "!1 !if { !1 !2 } else { !2 !1 }";
-        //let mut parser = Parser::new(text).unwrap();
-        //assert_eq!(
-            //parser.parse(),
-            //Ok(vec![
-                //Stmt::Expr {
-                    //expr: Expr::PushLeft {
-                        //expr: Box::new(Expr::Number { num: 1.0 })
-                    //}
-                //},
-                //Stmt::IfElse {
-                    //if_block: Box::new(Stmt::If {
-                        //main: Expr::PushLeft {
-                            //expr: Box::new(Expr::Op { op: "if" })
-                        //},
-                        //body: vec![
-                            //Stmt::Expr {
-                                //expr: Expr::PushLeft {
-                                    //expr: Box::new(Expr::Number { num: 1.0 })
-                                //}
-                            //},
-                            //Stmt::Expr {
-                                //expr: Expr::PushLeft {
-                                    //expr: Box::new(Expr::Number { num: 2.0 })
-                                //}
-                            //},
-                        //]
-                    //}),
-
-                    //else_block: vec![
-                        //Stmt::Expr {
-                            //expr: Expr::PushLeft {
-                                //expr: Box::new(Expr::Number { num: 2.0 })
-                            //}
-                        //},
-                        //Stmt::Expr {
-                            //expr: Expr::PushLeft {
-                                //expr: Box::new(Expr::Number { num: 1.0 })
-                            //}
-                        //},
-                    //]
-                //},
-            //])
-        //);
-    //}
+    #[test]
+    fn parse_if_else_block() {
+        // NOTE(madflash) - This !eq is here only to test, if we are successfully eating the
+        // while stmt and then moving to eat the next stmt nicely!
+        let text: &str = "!if !1 { !2 } else { 2! 1! } !eq";
+        let mut parser = Parser::new(text).unwrap();
+        assert_eq!(
+            parser.parse(),
+            Ok(vec![
+                Stmt::IfElse {
+                    master: Box::new(Stmt::If {
+                        main: Expr::PushLeft {
+                            expr: Box::new(Expr::Op { op: "if" })
+                        },
+                        condition: vec![
+                            Expr::PushLeft {
+                                expr: Box::new(Expr::Number { num: 1.0 })
+                            }
+                        ],
+                        body: Box::new(Stmt::Body {
+                            body: vec![
+                                Stmt::Expr {
+                                    expr: Expr::PushLeft {
+                                        expr: Box::new(Expr::Number { num: 2.0 })
+                                    }
+                                }
+                            ]
+                        })
+                    }),
+                    alternates: vec![
+                        Stmt::Body {
+                            body: vec![
+                                Stmt::Expr {
+                                    expr: Expr::PushRight {
+                                        expr: Box::new(Expr::Number { num: 2.0 })
+                                    }
+                                },
+                                Stmt::Expr {
+                                    expr: Expr::PushRight {
+                                        expr: Box::new(Expr::Number { num: 1.0 })
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                },
+                Stmt::Expr {
+                    expr: Expr::PushLeft {
+                        expr: Box::new(Expr::Op { op: "eq" }),
+                    },
+                }
+            ])
+        );
+    }
 
     #[test]
     fn parse_while_block() {
-        // NOTE(madflash) - This eq is here only to test, if we are successfully eating the
+        // NOTE(madflash) - This !eq is here only to test, if we are successfully eating the
         // while stmt and then moving to eat the next stmt nicely!
         let text: &str = "!while !dup { !1 } !eq";
         let mut parser = Parser::new(text).unwrap();
@@ -535,7 +547,7 @@ mod tests {
                     }]
                 })
             },
-            // NOTE(madflash) - This eq is here only to test, if we are successfully eating the
+            // NOTE(madflash) - This !eq is here only to test, if we are successfully eating the
             // while stmt and then moving to eat the next stmt nicely!
             Stmt::Expr {
                 expr: Expr::PushLeft {
