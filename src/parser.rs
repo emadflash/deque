@@ -1,6 +1,7 @@
 use std::{fmt, fmt::Display};
+use std::iter::{ IntoIterator, Peekable };
 
-use crate::lexer::{lex, Token, TokenKind};
+use crate::lexer::{TokenKind, Token, Lexer};
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -45,7 +46,7 @@ impl<'src> Display for Expr<'src> {
 #[derive(Debug, PartialEq)]
 pub(crate) enum Stmt<'src> {
     Expr { expr: Expr<'src> },
-    Block { body: Vec<Stmt<'src>> },
+    Body { body: Vec<Stmt<'src>> },
     If {
         main: Expr<'src>,
         condition: Vec<Expr<'src>>,
@@ -58,65 +59,46 @@ pub(crate) enum Stmt<'src> {
     While {
         main: Expr<'src>,
         condition: Vec<Expr<'src>>,
-        body: Vec<Stmt<'src>>,
+        body: Box<Stmt<'src>>,
     },
 }
 
 #[derive(Debug)]
 pub(crate) struct Parser<'src> {
-    tokens: Vec<Token<'src>>,
-    curr: usize,
+    lexer: Peekable<Lexer<'src>>
 }
 
 impl<'src> Parser<'src> {
-    pub(crate) fn from(text: &'src str) -> anyhow::Result<Parser> {
+    pub(crate) fn new(text: &'src str) -> anyhow::Result<Parser> {
         Ok(Self {
-            tokens: lex(&text)?,
-            curr: 0,
+            lexer: Lexer::new(text).peekable(),
         })
     }
 
-    fn next(&mut self) -> Option<&Token<'src>> {
-        if self.curr + 1 == self.tokens.len() {
-            return None;
+    pub(crate) fn expect(&mut self, expected_kind: TokenKind<'src>) -> Result<(), ParseError<'src>> {
+        let tok = self.lexer.peek().expect("Token for peeking");
+        match tok {
+            Err(e) => panic!("{:?}", e),
+            Ok(tok) => {
+                if tok.kind == expected_kind {
+                    self.lexer.next();
+                    return Ok(());
+                } else {
+                    return Err(ParseError::InvaildTokenKind { expected: expected_kind, found: tok.kind.clone() })
+                }
+            }
         }
-
-        self.curr += 1;
-        Some(&self.tokens[self.curr])
-    }
-
-    fn peek(&self) -> Option<&Token<'src>> {
-        if self.curr + 1 == self.tokens.len() {
-            return None;
-        }
-
-        Some(&self.tokens[self.curr + 1])
-    }
-
-    fn eof(&self) -> &Token<'src> {
-        assert_eq!(self.curr, self.tokens.len() - 1);
-        &self.tokens[self.curr]
-    }
-
-    fn expect(&mut self, expected: &TokenKind<'src>) -> Result<(), ParseError<'src>> {
-        if !matches!(&self.current().kind, _expected) {
-            return Err(ParseError::InvaildTokenKind {
-                expected: expected.clone(),
-                found: self.current().kind.clone(),
-            });
-        }
-
-        self.next();
-        Ok(())
     }
 
     // --------------------------------------------------------------------------
     //                          - Expr -
     // --------------------------------------------------------------------------
     fn parse_expr(&mut self) -> anyhow::Result<Expr<'src>, ParseError<'src>> {
-        let expr = match self.current().kind {
-            TokenKind::Sym { sym: "!" } => match self.next() {
-                Some(arg) => match arg.kind {
+        let tok = self.lexer.next().unwrap().unwrap();
+
+        let expr = match tok.kind {
+            TokenKind::Sym { sym: "!" } => match self.lexer.next() {
+                Some(arg) => match arg.unwrap().kind {
                     TokenKind::Number { num, .. } => Ok(Expr::PushLeft {
                         expr: Box::new(Expr::Number { num }),
                     }),
@@ -145,13 +127,13 @@ impl<'src> Parser<'src> {
 
             TokenKind::Keyword { kw } => match &kw {
                 &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"elif" | &"while" | &"eq" => {
-                    match self.next() {
-                        Some(op) => match op.kind {
+                    match self.lexer.next() {
+                        Some(op) => match op.as_ref().unwrap().kind {
                             TokenKind::Sym { sym: "!" } => Ok(Expr::PushRight {
                                 expr: Box::new(Expr::Op { op: kw }),
                             }),
 
-                            _ => Err(ParseError::InvaildOpKind { found: op.clone() }),
+                            _ => Err(ParseError::InvaildOpKind { found: op.unwrap().clone() }),
                         },
                         None => Err(ParseError::MissingOp),
                     }
@@ -160,136 +142,134 @@ impl<'src> Parser<'src> {
             },
 
             TokenKind::Sym { sym } => match &sym {
-                &"+" | &"-" | &"%" | &"<" | &">" => match self.next() {
-                    Some(op) => match op.kind {
+                &"+" | &"-" | &"%" | &"<" | &">" => match self.lexer.next() {
+                    Some(op) => match op.as_ref().unwrap().kind {
                         TokenKind::Sym { sym: "!" } => Ok(Expr::PushRight {
                             expr: Box::new(Expr::Op { op: sym }),
                         }),
 
-                        _ => Err(ParseError::InvaildOpKind { found: op.clone() }),
+                        _ => Err(ParseError::InvaildOpKind { found: op.unwrap().clone() }),
                     },
                     None => Err(ParseError::MissingOp),
                 },
-                _ => unreachable!("{}, prev: {:?}", sym,  self.tokens[self.curr - 2]),
+                _ => unreachable!("this: {:?}", sym),
             },
 
-            TokenKind::Number { num, .. } => match self.next() {
-                Some(arg) => match arg.kind {
-                    TokenKind::Sym { sym: "!" } => Ok(Expr::PushRight {
-                        expr: Box::new(Expr::Number { num }),
-                    }),
-                    _ => Err(ParseError::InvaildOpKind { found: arg.clone() }),
+            TokenKind::Number { num, .. } => match self.lexer.next() {
+                None => unreachable!(),
+                Some(arg) => {
+                    let tok = arg.as_ref().unwrap();
+                    match tok.kind {
+                        TokenKind::Sym { sym: "!" } => Ok(Expr::PushRight {
+                            expr: Box::new(Expr::Number { num }),
+                        }),
+                        _ => Err(ParseError::InvaildOpKind { found: arg.unwrap().clone() }),
+                    }
                 },
-
-                None => Err(ParseError::InvaildOpKind {
-                    found: self.eof().clone(),
-                }),
             },
 
             _ => unreachable!(),
         };
 
-        self.next();
         expr
     }
 
     // --------------------------------------------------------------------------
-    //                          - Block -
+    //                          - Body/Block -
     // --------------------------------------------------------------------------
-    fn parse_block(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
-        assert!(matches!(self.current(), Token { kind: TokenKind::Sym { sym: "{" }, .. }));
+    fn parse_body(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
+        self.expect(TokenKind::Sym { sym: "{" })?;
         let mut body: Vec<Stmt<'src>> = Vec::new();
 
-        while let Some(tok) = self.next() {
-            if matches!(tok, Token { kind: TokenKind::Sym { sym: "}" }, .. }) {
-                break;
+        while let Some(tok) = self.lexer.peek() {
+            match tok {
+                Err(e) => panic!("error: {:?}", e),
+                Ok(tok) => {
+                    if matches!(tok.kind, TokenKind::Sym { sym: "}" }) {
+                        break;
+                    }
+                    body.push(self.parse_stmt()?);
+                }
             }
-            body.push(self.parse_stmt()?);
         }
 
-        self.expect(&TokenKind::Sym { sym: "}" })?;
-        Ok(Stmt::Block { body })
+        self.expect(TokenKind::Sym { sym: "}" })?;
+        Ok(Stmt::Body { body })
     }
 
     // --------------------------------------------------------------------------
     //                          - If -
     // --------------------------------------------------------------------------
-    fn is_elif_start(&mut self) -> bool {
-        if matches!(self.current(), Token { kind: TokenKind::Sym { sym: "!" }, .. }) && 
-            matches!(self.peek(), Some(Token { kind: TokenKind::Keyword { kw: "elif" }, .. })) {
-                return true;
-        }
+    //fn is_elif_start(&mut self) -> bool {
+        //if matches!(self.current(), Token { kind: TokenKind::Sym { sym: "!" }, .. }) && 
+            //matches!(self.peek(), Some(Token { kind: TokenKind::Keyword { kw: "elif" }, .. })) {
+                //return true;
+        //}
 
-        if matches!(self.current(), Token { kind: TokenKind::Sym { sym: "elif" }, .. }) && 
-            matches!(self.peek(), Some(Token { kind: TokenKind::Keyword { kw: "!" }, .. })) {
-                return true;
-        }
+        //if matches!(self.current(), Token { kind: TokenKind::Sym { sym: "elif" }, .. }) && 
+            //matches!(self.peek(), Some(Token { kind: TokenKind::Keyword { kw: "!" }, .. })) {
+                //return true;
+        //}
 
-        false
-    }
+        //false
+    //}
 
-    fn parse_if_block(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
-        let mut condition: Vec<Expr<'src>> = Vec::new();
+    //fn parse_if_block(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
+        //let mut condition: Vec<Expr<'src>> = Vec::new();
 
-        while let Some(tok) = self.next() {
-            if matches!(tok, Token { kind: TokenKind::Sym { sym: "{" }, ..}) {
-                break;
-            }
-            condition.push(self.parse_expr()?);
-        }
+        //while let Some(tok) = self.next() {
+            //if matches!(tok, Token { kind: TokenKind::Sym { sym: "{" }, ..}) {
+                //break;
+            //}
+            //condition.push(self.parse_expr()?);
+        //}
 
-        self.expect(&TokenKind::Sym { sym: "{" })?;
-        Ok(Stmt::If { main, condition, body: Box::new(self.parse_block()?) })
-    }
+        //self.expect(&TokenKind::Sym { sym: "{" })?;
+        //Ok(Stmt::If { main, condition, body: Box::new(self.parse_body()?) })
+    //}
 
-    fn parse_if_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
-        let master = self.parse_if_block(main)?;
-        let mut alternates: Vec<Stmt<'src>> = Vec::new();
+    //fn parse_if_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
+        //let master = self.parse_if_block(main)?;
+        //let mut alternates: Vec<Stmt<'src>> = Vec::new();
 
-        while self.is_elif_start() {
-            let main = self.parse_expr()?;
-            alternates.push(self.parse_if_block(main)?);
-            self.next();
-        }
+        //while self.is_elif_start() {
+            //let main = self.parse_expr()?;
+            //alternates.push(self.parse_if_block(main)?);
+            //self.next();
+        //}
 
-        if matches!(self.peek(), Some(&Token { kind: TokenKind::Keyword { kw: "else" }, .. })) {
-            self.next();
-            self.next();
-            alternates.push(self.parse_block()?);
-        }
+        //if matches!(self.peek(), Some(&Token { kind: TokenKind::Keyword { kw: "else" }, .. })) {
+            //self.next();
+            //self.next();
+            //alternates.push(self.parse_body()?);
+        //}
 
-        if alternates.is_empty() {
-            return Ok(master);
-        }
-        Ok(Stmt::IfElse { master: Box::new(master), alternates })
-    }
+        //if alternates.is_empty() {
+            //return Ok(master);
+        //}
+        //Ok(Stmt::IfElse { master: Box::new(master), alternates })
+    //}
 
     fn parse_while_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
         let mut condition: Vec<Expr<'src>> = Vec::new();
         let mut body: Vec<Stmt<'src>> = Vec::new();
 
-        while let Some(tok) = self.next() {
-            if matches!(tok, Token { kind: TokenKind::Sym { sym: "{" }, .. }) {
-                break;
-            }
-            condition.push(self.parse_expr()?);
-        }
-
-        self.expect(&TokenKind::Sym { sym: "{" })?;
-
-        while let Some(tok) = self.next() {
-            if matches!(tok, Token { kind: TokenKind::Sym { sym: "}" }, .. }) {
-                break;
-            } else {
-                body.push(self.parse_stmt()?);
+        while let Some(tok) = self.lexer.peek() {
+            match tok {
+                Err(e) => panic!("error: {:?}", e),
+                Ok(tok) => {
+                    if matches!(tok.kind, TokenKind::Sym { sym: "{" }) {
+                        break;
+                    }
+                    condition.push(self.parse_expr()?);
+                }
             }
         }
 
-        self.expect(&TokenKind::Sym { sym: "{" })?;
         Ok(Stmt::While {
             main,
             condition,
-            body,
+            body: Box::new(self.parse_body()?),
         })
     }
 
@@ -299,7 +279,7 @@ impl<'src> Parser<'src> {
         match stmt {
             Expr::PushLeft { ref expr } | Expr::PushRight { ref expr } => {
                 match **expr {
-                    Expr::Op { op: "if" } => return self.parse_if_stmt(stmt),
+                    //Expr::Op { op: "if" } => return self.parse_if_stmt(stmt),
                     Expr::Op { op: "while" } => return self.parse_while_stmt(stmt),
                     _ => (),
                 };
@@ -314,7 +294,15 @@ impl<'src> Parser<'src> {
     pub(crate) fn parse(&mut self) -> anyhow::Result<Vec<Stmt<'src>>, ParseError<'src>> {
         let mut stmts: Vec<Stmt> = Vec::new();
 
-        while !matches!(self.current(), Token { kind: TokenKind::Eof, .. }) {
+        while let Some(tok) = self.lexer.peek() {
+            match tok {
+                Err(e) => panic!("{:?}", e),
+                Ok(tok) => {
+                    if tok.kind == TokenKind::Eof {
+                        break;
+                    }
+                }
+            }
             stmts.push(self.parse_stmt()?);
         }
 
@@ -327,9 +315,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn misc_exprs() {
+    fn parse_miscellaneous_exprs() {
         let text: &str = "!+ !- !2 !- dup! !> <!";
-        let mut parser = Parser::from(text).unwrap();
+        let mut parser = Parser::new(text).unwrap();
         assert_eq!(
             parser.parse(),
             Ok(vec![
@@ -375,7 +363,7 @@ mod tests {
     #[test]
     fn parse_only_if_stmt() {
         let text: &str = "!if !1 { !1 !2 } !69";
-        let mut parser = Parser::from(text).unwrap();
+        let mut parser = Parser::new(text).unwrap();
         assert_eq!(
             parser.parse(),
             Ok(vec![
@@ -388,7 +376,7 @@ mod tests {
                              expr: Box::new(Expr::Number { num: 1.0 })
                          }
                     ],
-                    body: Box::new(Stmt::Block {
+                    body: Box::new(Stmt::Body {
                         body: vec![
                             Stmt::Expr {
                                 expr: Expr::PushLeft {
@@ -415,7 +403,7 @@ mod tests {
     #[test]
     fn parse_if_elif_block() {
         let text: &str = "!if !1 { } !elif !dup !> { } !elif dup! { 69! } !68";
-        let mut parser = Parser::from(text).unwrap();
+        let mut parser = Parser::new(text).unwrap();
         assert_eq!(
             parser.parse(),
             Ok(vec![
@@ -429,7 +417,7 @@ mod tests {
                                 expr: Box::new(Expr::Number { num: 1.0}),
                             },
                         ],
-                        body: Box::new(Stmt::Block {
+                        body: Box::new(Stmt::Body {
                             body: vec![]
                         })
                     }),
@@ -446,7 +434,7 @@ mod tests {
                                     expr: Box::new(Expr::Op { op: ">" }),
                                 },
                             ],
-                            body: Box::new(Stmt::Block { body: vec![] })
+                            body: Box::new(Stmt::Body { body: vec![] })
                         },
                         Stmt::If {
                             main: Expr::PushLeft {
@@ -455,7 +443,7 @@ mod tests {
                             condition: vec![Expr::PushRight {
                                 expr: Box::new(Expr::Op { op: "dup" }),
                             },],
-                            body: Box::new(Stmt::Block {
+                            body: Box::new(Stmt::Body {
                                 body: vec![
                                     Stmt::Expr {
                                         expr: Expr::PushRight {
@@ -479,7 +467,7 @@ mod tests {
     //#[test]
     //fn parse_if_else_block() {
         //let text: &str = "!1 !if { !1 !2 } else { !2 !1 }";
-        //let mut parser = Parser::from(text).unwrap();
+        //let mut parser = Parser::new(text).unwrap();
         //assert_eq!(
             //parser.parse(),
             //Ok(vec![
@@ -526,8 +514,10 @@ mod tests {
 
     #[test]
     fn parse_while_block() {
-        let text: &str = "!while !dup { !1 }";
-        let mut parser = Parser::from(text).unwrap();
+        // NOTE(madflash) - This eq is here only to test, if we are successfully eating the
+        // while stmt and then moving to eat the next stmt nicely!
+        let text: &str = "!while !dup { !1 } !eq";
+        let mut parser = Parser::new(text).unwrap();
         assert_eq!(
             parser.parse(),
             Ok(vec![Stmt::While {
@@ -537,12 +527,22 @@ mod tests {
                 condition: vec![Expr::PushLeft {
                     expr: Box::new(Expr::Op { op: "dup" }),
                 },],
-                body: vec![Stmt::Expr {
-                    expr: Expr::PushLeft {
-                        expr: Box::new(Expr::Number { num: 1.0 }),
-                    },
-                }],
-            }])
+                body: Box::new(Stmt::Body {
+                    body: vec![Stmt::Expr {
+                        expr: Expr::PushLeft {
+                            expr: Box::new(Expr::Number { num: 1.0 }),
+                        },
+                    }]
+                })
+            },
+            // NOTE(madflash) - This eq is here only to test, if we are successfully eating the
+            // while stmt and then moving to eat the next stmt nicely!
+            Stmt::Expr {
+                expr: Expr::PushLeft {
+                    expr: Box::new(Expr::Op { op: "eq" }),
+                },
+            }
+            ])
         );
     }
 }

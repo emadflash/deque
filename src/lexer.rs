@@ -256,7 +256,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn lex_misc() {
+    fn lex_miscellaneous() {
         let lexer = Lexer::new("!+ !- !2 >!");
         let tokens = lexer.map(|tok| tok.unwrap()).collect::<Vec<_>>();
         assert_eq!(
@@ -274,6 +274,7 @@ mod tests {
             ]
         );
     }
+
     #[test]
     fn lex_strings() {
         let lexer = Lexer::new("\"string 1\"   \"string 2\" 69");
