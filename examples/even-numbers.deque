@@ -6,7 +6,7 @@
     !dup !2 !%
 
     !if !0 !eq {
-        !println
+        !dup !println
     }
     
     !1 !+

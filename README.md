@@ -2,10 +2,7 @@
 Deque based programming language
 
 ## T O D O
-- [X] if stmt
-- [X] if-else stmt
-- [ ] if-elif stmt
-- [ ] if-elif-else stmt
+- [X] if-stmt (if, if-elif, if-elif-else, if-else)
 - [X] while stmt
 - [ ] variables
 - [ ] consts

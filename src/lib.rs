@@ -1,4 +1,4 @@
-//pub mod env;
-//pub mod eval;
+pub mod eval;
+pub mod env;
 pub(crate) mod lexer;
-pub mod parser;
+pub(crate) mod parser;

@@ -1,0 +1,27 @@
+-- the classic fizzbuzz
+--
+--  **NOTE**
+--  69 means fizz
+--  70 means buzz
+--  71 means fizzbuzz
+--
+--  Why numbers not strings, bcz we don't have strings yet
+
+
+-- prints the numbers from 1 to 15 and fizz, buzz and fizzbuzz
+
+!1
+
+!while !dup !16 !> {
+    !if !dup !15 !% !0 !eq {
+        !71 !println  -- fizzbuzz, if number is divisible by 3 and 5
+    } elif !dup !3 !% !0 !eq {
+        !69 !println  -- fizz
+    } elif !dup !5 !% !0 !eq {
+        !70 !println  -- buzz
+    } else {
+        !dup !println
+    }
+
+    !dup !1 !+
+}

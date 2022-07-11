@@ -1,10 +1,9 @@
 use std::{fmt, fmt::Display};
-use std::iter::{ IntoIterator, Peekable };
+use std::iter::Peekable;
 
 use crate::lexer::{TokenKind, Token, Lexer};
-use thiserror::Error;
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(thiserror::Error, Debug, PartialEq)]
 pub(crate) enum ParseError<'src> {
     #[error("missing expression")]
     MissingExpr,
@@ -22,6 +21,9 @@ pub(crate) enum ParseError<'src> {
     },
 }
 
+// --------------------------------------------------------------------------
+//                          - Expr -
+// --------------------------------------------------------------------------
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Expr<'src> {
     Number { num: f32 },
@@ -43,13 +45,16 @@ impl<'src> Display for Expr<'src> {
     }
 }
 
+// --------------------------------------------------------------------------
+//                          - Stmt -
+// --------------------------------------------------------------------------
 #[derive(Debug, PartialEq)]
 pub(crate) enum Stmt<'src> {
     Expr { expr: Expr<'src> },
     Body { body: Vec<Stmt<'src>> },
     If {
         main: Expr<'src>,
-        condition: Vec<Expr<'src>>,
+        conditions: Vec<Expr<'src>>,
         body: Box<Stmt<'src>>,
     },
     IfElse {
@@ -58,23 +63,45 @@ pub(crate) enum Stmt<'src> {
     },
     While {
         main: Expr<'src>,
-        condition: Vec<Expr<'src>>,
+        conditions: Vec<Expr<'src>>,
         body: Box<Stmt<'src>>,
     },
 }
 
+impl<'src> Stmt<'src> {
+    pub(crate) fn unwrap_body(&self) -> &Vec<Stmt<'src>> {
+        match self {
+            Stmt::Body { ref body } => body,
+            _ => unreachable!("unwraping body requires body!"),
+        }
+    }
+
+    pub(crate) fn unwrap_if(&self) -> (&Expr<'src>, &Vec<Expr<'src>>, &Box<Stmt<'src>>) {
+        match self {
+            Stmt::If { ref main, ref conditions, ref body } => (main, conditions, body),
+            _ => unreachable!("should be used for unwraping if-stmt")
+        }
+    }
+}
+
+// --------------------------------------------------------------------------
+//                          - Parser -
+// --------------------------------------------------------------------------
 #[derive(Debug)]
 pub(crate) struct Parser<'src> {
     lexer: Peekable<Lexer<'src>>
 }
 
 impl<'src> Parser<'src> {
-    pub(crate) fn new(text: &'src str) -> anyhow::Result<Parser> {
+    pub(crate) fn new(src: &'src str) -> anyhow::Result<Parser> {
         Ok(Self {
-            lexer: Lexer::new(text).peekable(),
+            lexer: Lexer::new(src).peekable(),
         })
     }
 
+    // --------------------------------------------------------------------------
+    //                          - Helpers -
+    // --------------------------------------------------------------------------
     pub(crate) fn match_next_token(&mut self, expected_kind: TokenKind<'src>) -> bool {
         let tok = self.lexer.peek().expect("Token for peeking");
         match tok {
@@ -214,7 +241,7 @@ impl<'src> Parser<'src> {
     //                          - If -
     // --------------------------------------------------------------------------
     fn parse_if_block(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
-        let mut condition: Vec<Expr<'src>> = Vec::new();
+        let mut conditions: Vec<Expr<'src>> = Vec::new();
 
         while let Some(tok) = self.lexer.peek() {
             match tok {
@@ -223,16 +250,16 @@ impl<'src> Parser<'src> {
                     if matches!(tok.kind, TokenKind::Sym { sym: "{" }) {
                         break;
                     }
-                    condition.push(self.parse_expr()?);
+                    conditions.push(self.parse_expr()?);
                 }
             }
         }
 
-        if condition.is_empty() {
-            panic!("expected condition in if stmt");
+        if conditions.is_empty() {
+            panic!("expected conditions in if stmt");
         }
 
-        Ok(Stmt::If { main, condition, body: Box::new(self.parse_body()?) })
+        Ok(Stmt::If { main, conditions, body: Box::new(self.parse_body()?) })
     }
 
     fn parse_if_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
@@ -257,7 +284,7 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_while_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
-        let mut condition: Vec<Expr<'src>> = Vec::new();
+        let mut conditions: Vec<Expr<'src>> = Vec::new();
 
         while let Some(tok) = self.lexer.peek() {
             match tok {
@@ -266,14 +293,14 @@ impl<'src> Parser<'src> {
                     if matches!(tok.kind, TokenKind::Sym { sym: "{" }) {
                         break;
                     }
-                    condition.push(self.parse_expr()?);
+                    conditions.push(self.parse_expr()?);
                 }
             }
         }
 
         Ok(Stmt::While {
             main,
-            condition,
+            conditions,
             body: Box::new(self.parse_body()?),
         })
     }
@@ -376,7 +403,7 @@ mod tests {
                     main: Expr::PushLeft {
                         expr: Box::new(Expr::Op { op: "if" })
                     },
-                    condition: vec![
+                    conditions: vec![
                          Expr::PushLeft {
                              expr: Box::new(Expr::Number { num: 1.0 })
                          }
@@ -417,7 +444,7 @@ mod tests {
                         main: Expr::PushLeft {
                             expr: Box::new(Expr::Op { op: "if" })
                         },
-                        condition: vec![
+                        conditions: vec![
                             Expr::PushLeft {
                                 expr: Box::new(Expr::Number { num: 1.0}),
                             },
@@ -431,7 +458,7 @@ mod tests {
                             main: Expr::PushLeft {
                                 expr: Box::new(Expr::Op { op: "if" })
                             },
-                            condition: vec![
+                            conditions: vec![
                                 Expr::PushLeft {
                                     expr: Box::new(Expr::Op { op: "dup" }),
                                 },
@@ -445,7 +472,7 @@ mod tests {
                             main: Expr::PushLeft {
                                 expr: Box::new(Expr::Op { op: "if" })
                             },
-                            condition: vec![Expr::PushRight {
+                            conditions: vec![Expr::PushRight {
                                 expr: Box::new(Expr::Op { op: "dup" }),
                             },],
                             body: Box::new(Stmt::Body {
@@ -483,7 +510,7 @@ mod tests {
                         main: Expr::PushLeft {
                             expr: Box::new(Expr::Op { op: "if" })
                         },
-                        condition: vec![
+                        conditions: vec![
                             Expr::PushLeft {
                                 expr: Box::new(Expr::Number { num: 1.0 })
                             }
@@ -536,7 +563,7 @@ mod tests {
                 main: Expr::PushLeft {
                     expr: Box::new(Expr::Op { op: "while" }),
                 },
-                condition: vec![Expr::PushLeft {
+                conditions: vec![Expr::PushLeft {
                     expr: Box::new(Expr::Op { op: "dup" }),
                 },],
                 body: Box::new(Stmt::Body {

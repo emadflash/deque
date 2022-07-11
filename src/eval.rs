@@ -1,6 +1,11 @@
 use crate::env::Env;
-use crate::parser::{Expr, ParseError, Parser, Stmt};
-use std::collections::VecDeque;
+use crate::parser::{Expr, Parser, Stmt};
+
+#[derive(thiserror::Error, Debug, PartialEq)]
+enum EvalError {
+    #[error("missing argument")]
+    MissingArg
+}
 
 pub struct Eval<'a> {
     env: &'a mut Env,
@@ -28,11 +33,11 @@ impl<'a, 'src> Eval<'a> {
                         let _ = self.env.deque.pop_front().unwrap();
                     }
                     "print" => {
-                        let dup = self.env.deque.front().unwrap();
+                        let dup = self.env.deque.pop_front().unwrap();
                         print!("{}", dup);
                     }
                     "println" => {
-                        let dup = self.env.deque.front().unwrap();
+                        let dup = self.env.deque.pop_front().unwrap();
                         println!("{}", dup);
                     }
 
@@ -108,8 +113,12 @@ impl<'a, 'src> Eval<'a> {
                     "drop" => {
                         let _ = self.env.deque.pop_back().unwrap();
                     }
+                    "print" => {
+                        let dup = self.env.deque.pop_back().unwrap();
+                        print!("{}", dup);
+                    }
                     "println" => {
-                        let dup = self.env.deque.back().unwrap();
+                        let dup = self.env.deque.pop_back().unwrap();
                         println!("{}", dup);
                     }
 
@@ -176,27 +185,26 @@ impl<'a, 'src> Eval<'a> {
         }
     }
 
-    fn eval_if_stmt(&mut self, main: &Expr<'src>, body: &Vec<Stmt<'src>>) -> bool {
+    fn eval_if_stmt(&mut self, stmt: &Stmt<'src>) -> bool {
+        let (main, conditions, body) = stmt.unwrap_if();
         let mut flag = false;
 
         if matches!(main, Expr::PushLeft { .. }) {
-            if self.env.deque.pop_front().unwrap() == 1.0 {
-                flag = true;
+            conditions.iter().for_each(|condition| self.eval_expr(condition));
 
-                //  B O D Y
-                for stmt_ in body {
-                    self.eval_stmt(&stmt_);
-                }
+            if self.env.deque.pop_front().unwrap() == 1.0 { // test
+                flag = true;
             }
         } else {
-            if self.env.deque.pop_back().unwrap() == 1.0 {
-                flag = true;
+            conditions.iter().for_each(|condition| self.eval_expr(condition));
 
-                //  B O D Y
-                for stmt_ in body {
-                    self.eval_stmt(&stmt_);
-                }
+            if self.env.deque.pop_back().unwrap() == 1.0 { // test
+                flag = true;
             }
+        }
+
+        if flag {
+            body.unwrap_body().iter().for_each(|stmt| self.eval_stmt(&stmt));
         }
 
         flag
@@ -205,30 +213,32 @@ impl<'a, 'src> Eval<'a> {
     fn eval_stmt(&mut self, stmt: &Stmt<'src>) {
         match stmt {
             Stmt::Expr { expr } => self.eval_expr(expr),
-            Stmt::If { main, body } => {
-                let _ = self.eval_if_stmt(main, body);
+            Stmt::If { .. } => {
+                let _ = self.eval_if_stmt(stmt);
             }
-            Stmt::IfElse { if_block, else_block } => {
-                if let Stmt::If { main, body } = &**if_block {
-                    if !self.eval_if_stmt(&main, &body) {
-                        for stmt_ in else_block {
-                            self.eval_stmt(&stmt_);
+            Stmt::IfElse { master, alternates } => {
+                if !self.eval_if_stmt(master) {
+                    for alternate in alternates {
+                        match alternate {
+                            // elif arms
+                            Stmt::If { .. } => {
+                                if self.eval_if_stmt(alternate) {
+                                    break;
+                                }
+                            }
+                            // else arm
+                            Stmt::Body { .. } => alternate.unwrap_body().iter().for_each(|stmt| self.eval_stmt(&stmt)),
+                            _ => unreachable!()
                         }
                     }
                 }
             }
-            Stmt::While {
-                main,
-                condition,
-                body,
-            } => {
+            Stmt::While { main, conditions, body } => {
                 loop {
-                    // E X P R
-                    for expr in condition {
-                        self.eval_expr(expr);
-                    }
+                    // run condition
+                    conditions.iter().for_each(|expr| self.eval_expr(expr));
 
-                    // T E S T
+                    // test condition
                     if matches!(main, Expr::PushLeft { .. }) {
                         if self.env.deque.pop_front().unwrap() != 1.0 {
                             break;
@@ -239,10 +249,8 @@ impl<'a, 'src> Eval<'a> {
                         }
                     }
 
-                    // B O D Y
-                    for stmt_ in body {
-                        self.eval_stmt(&stmt_);
-                    }
+                    // body
+                    body.unwrap_body().iter().for_each(|stmt| self.eval_stmt(&stmt));
                 }
             }
 
@@ -252,7 +260,7 @@ impl<'a, 'src> Eval<'a> {
 
     pub fn eval(&mut self, src: &'src str) -> anyhow::Result<()> {
         let mut ip = 0;
-        let mut parser = Parser::from(&src).unwrap();
+        let mut parser = Parser::new(src).unwrap();
         let stmts = parser.parse().unwrap();
 
         while ip < stmts.len() {
@@ -267,44 +275,61 @@ impl<'a, 'src> Eval<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::VecDeque;
 
     #[test]
-    fn eval_arithmetic() {
+    fn evaluate_arithmetic_exprs() {
         let mut env = Env::new();
         let mut eval = Eval::new(&mut env);
-        assert!(eval.eval("!1 !2 !+ !print").is_ok());
+        assert!(eval.eval("!1 !2 !+ !dup !print").is_ok());
         assert_eq!(env.deque, VecDeque::from([3.0]));
     }
 
     #[test]
-    fn eval_if_stmt() {
-        let mut env = Env::new();
-        let mut eval = Eval::new(&mut env);
-        assert!(eval.eval("!1 !if { !1 !2 !+ }").is_ok());
-        assert_eq!(env.deque, VecDeque::from([3.0]));
+    fn evaluate_if_statements() {
+        {
+            let mut env = Env::new();
+            let mut eval = Eval::new(&mut env);
+            assert!(eval.eval("!if !1 { !1 !2 !+ }").is_ok());
+            assert_eq!(env.deque, VecDeque::from([3.0]));
+        }
+
+        {
+            let mut env = Env::new();
+            let mut eval = Eval::new(&mut env);
+            assert!(eval.eval("!0 !if !1 !eq { !1 !2 !+ } else { !2 !1 !- }").is_ok());
+            assert_eq!(env.deque, VecDeque::from([1.0]));
+        }
+
+        {
+            let mut env = Env::new();
+            let mut eval = Eval::new(&mut env);
+            assert!(eval.eval("
+                !0
+                !if !dup !1 !eq {
+                    !1 !2 !+
+                } elif !dup !0 !eq {
+                    !99 !+
+                } else {
+                    !2 !1 !-
+                }
+            ").is_ok());
+            assert_eq!(env.deque, VecDeque::from([99.0]));
+        }
     }
 
     #[test]
-    fn eval_if_else_stmt() {
-        let mut env = Env::new();
-        let mut eval = Eval::new(&mut env);
-        assert!(eval.eval("!0 !if { !1 !2 !+ } else { !2 !1 !- }").is_ok());
-        assert_eq!(env.deque, VecDeque::from([1.0]));
-    }
-
-    #[test]
-    fn eval_while_stmt() {
+    fn evaluate_while_loop() {
         // Series from 0 to 10 (including 10)
         let mut env = Env::new();
         let mut eval = Eval::new(&mut env);
-        assert!(eval
-            .eval(
+        assert!(eval.eval(
                 "
-!1
-!while !dup !10 !> {
-    !dup !1 !+
-}
-"
+                !1
+                !while !dup !10 !> {
+                    !dup !1 !+
+                }
+                "
             )
             .is_ok());
         assert_eq!(
