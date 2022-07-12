@@ -3,7 +3,7 @@ use std::iter::Peekable;
 use std::str::CharIndices;
 use thiserror::Error;
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug, PartialEq, Clone)]
 pub(crate) enum LexerError {
     #[error("missing ending quotes")]
     MissingEndOfStringQuote,
@@ -144,6 +144,7 @@ impl<'src> Lexer<'src> {
 
                     while let Some((_, a)) = self.chars.peek() {
                         match a {
+                            '\n' => break,
                             '"' => {
                                 success = true;
                                 self.chars.next();

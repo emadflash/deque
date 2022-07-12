@@ -23,7 +23,7 @@ impl<'a, 'src> Eval<'a> {
                 Expr::Boolean(value) => self.env.deque.push_front(Object::Boolean { value }),
 
                 ////////////////////////////////
-                // ~ Ops/Builtin
+                // ~ Ops/Builtins
                 Expr::Op { op } => match op {
                     "dup" => {
                         let dup = self.env.deque.front().unwrap();
@@ -221,6 +221,27 @@ impl<'a, 'src> Eval<'a> {
         flag
     }
 
+    fn eval_while_stmt(&mut self, main: &Expr<'src>, conditions: &Vec<Expr<'src>>, body: &Box<Stmt<'src>>) {
+        loop {
+            // run condition
+            conditions.iter().for_each(|expr| self.eval_expr(expr));
+
+            // test condition
+            if matches!(main, Expr::PushLeft { .. }) {
+                if self.env.deque.pop_front().unwrap().unwrap_bool() == &false { // test
+                    break;
+                }
+            } else {
+                if self.env.deque.pop_back().unwrap().unwrap_bool() == &false { // test
+                    break;
+                }
+            }
+
+            // body
+            body.unwrap_body().iter().for_each(|stmt| self.eval_stmt(&stmt));
+        }
+    }
+
     fn eval_stmt(&mut self, stmt: &Stmt<'src>) {
         match stmt {
             Stmt::Expr { expr } => self.eval_expr(expr),
@@ -244,27 +265,7 @@ impl<'a, 'src> Eval<'a> {
                     }
                 }
             }
-            Stmt::While { main, conditions, body } => {
-                loop {
-                    // run condition
-                    conditions.iter().for_each(|expr| self.eval_expr(expr));
-
-                    // test condition
-                    if matches!(main, Expr::PushLeft { .. }) {
-                        if self.env.deque.pop_front().unwrap().unwrap_bool() == &false { // test
-                            break;
-                        }
-                    } else {
-                        if self.env.deque.pop_back().unwrap().unwrap_bool() == &false { // test
-                            break;
-                        }
-                    }
-
-                    // body
-                    body.unwrap_body().iter().for_each(|stmt| self.eval_stmt(&stmt));
-                }
-            }
-
+            Stmt::While { main, conditions, body } => self.eval_while_stmt(main, conditions, body),
             _ => (),
         }
     }

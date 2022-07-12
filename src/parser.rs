@@ -6,7 +6,7 @@ use crate::lexer::{TokenKind, Token, Lexer, LexerError};
 #[derive(thiserror::Error, Debug, PartialEq)]
 pub(crate) enum ParseError<'src> {
     #[error("lexer error")]
-    LexerError(LexerError),
+    LexerError(#[from] LexerError),
 
     #[error("missing expression")]
     MissingExpr,
@@ -19,6 +19,12 @@ pub(crate) enum ParseError<'src> {
         expected: TokenKind<'src>,
         found: TokenKind<'src>,
     },
+}
+
+impl<'src> From<&LexerError> for ParseError<'src> {
+    fn from(e: &LexerError) -> Self {
+        ParseError::LexerError(e.clone())
+    }
 }
 
 // --------------------------------------------------------------------------
@@ -132,16 +138,11 @@ impl<'src> Parser<'src> {
 
     pub(crate) fn expect(&mut self, expected_kind: TokenKind<'src>) -> Result<(), ParseError<'src>> {
         let tok = self.lexer.peek().expect("Token for peeking");
-        match tok {
-            Err(e) => panic!("{:?}", e),
-            Ok(tok) => {
-                if tok.kind == expected_kind {
-                    self.lexer.next();
-                    return Ok(());
-                } else {
-                    return Err(ParseError::InvaildTokenKind { expected: expected_kind, found: tok.kind.clone() })
-                }
-            }
+        if tok.as_ref()?.kind == expected_kind {
+            self.lexer.next();
+            return Ok(());
+        } else {
+            return Err(ParseError::InvaildTokenKind { expected: expected_kind, found: tok.as_ref()?.kind.clone() })
         }
     }
 
@@ -149,11 +150,11 @@ impl<'src> Parser<'src> {
     //                          - Expr -
     // --------------------------------------------------------------------------
     fn parse_expr(&mut self) -> anyhow::Result<Expr<'src>, ParseError<'src>> {
-        let tok = self.lexer.next().unwrap().unwrap();
+        let tok = self.lexer.next().expect("expression")?;
 
         let expr = match tok.kind {
             TokenKind::Sym { sym: "!" } => match self.lexer.next() {
-                Some(arg) => match arg.unwrap().kind {
+                Some(arg) => match arg?.kind {
                     TokenKind::Number { num, .. } => Ok(Expr::PushLeft {
                         expr: Box::new(Expr::Number { num }),
                     }),
@@ -230,7 +231,7 @@ impl<'src> Parser<'src> {
                 })
             },
 
-            _ => unreachable!(),
+            _ => unreachable!("{:?}", tok),
         };
 
         expr
@@ -266,15 +267,10 @@ impl<'src> Parser<'src> {
         let mut conditions: Vec<Expr<'src>> = Vec::new();
 
         while let Some(tok) = self.lexer.peek() {
-            match tok {
-                Err(e) => panic!("error: {:?}", e),
-                Ok(tok) => {
-                    if matches!(tok.kind, TokenKind::Sym { sym: "{" }) {
-                        break;
-                    }
-                    conditions.push(self.parse_expr()?);
-                }
+            if matches!(tok.as_ref()?.kind, TokenKind::Sym { sym: "{" }) {
+                break;
             }
+            conditions.push(self.parse_expr()?);
         }
 
         if conditions.is_empty() {
@@ -309,15 +305,10 @@ impl<'src> Parser<'src> {
         let mut conditions: Vec<Expr<'src>> = Vec::new();
 
         while let Some(tok) = self.lexer.peek() {
-            match tok {
-                Err(e) => panic!("error: {:?}", e),
-                Ok(tok) => {
-                    if matches!(tok.kind, TokenKind::Sym { sym: "{" }) {
-                        break;
-                    }
-                    conditions.push(self.parse_expr()?);
-                }
+            if matches!(tok.as_ref()?.kind, TokenKind::Sym { sym: "{" }) {
+                break;
             }
+            conditions.push(self.parse_expr()?);
         }
 
         Ok(Stmt::While {
@@ -349,13 +340,8 @@ impl<'src> Parser<'src> {
         let mut stmts: Vec<Stmt> = Vec::new();
 
         while let Some(tok) = self.lexer.peek() {
-            match tok {
-                Err(e) => panic!("lexer error: {:?}", e),
-                Ok(tok) => {
-                    if tok.kind == TokenKind::Eof {
-                        break;
-                    }
-                }
+            if tok.as_ref()?.kind == TokenKind::Eof {
+                break;
             }
             stmts.push(self.parse_stmt()?);
         }
