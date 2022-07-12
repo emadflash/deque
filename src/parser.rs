@@ -1,18 +1,18 @@
 use std::{fmt, fmt::Display};
 use std::iter::Peekable;
 
-use crate::lexer::{TokenKind, Token, Lexer};
+use crate::lexer::{TokenKind, Token, Lexer, LexerError};
 
 #[derive(thiserror::Error, Debug, PartialEq)]
 pub(crate) enum ParseError<'src> {
+    #[error("lexer error")]
+    LexerError(LexerError),
+
     #[error("missing expression")]
     MissingExpr,
 
     #[error("missing op")]
     MissingOp,
-
-    #[error("invaild op kind (found: {found:?})")]
-    InvaildOpKind { found: Token<'src> },
 
     #[error("invaild token kind (expected: {expected:?}, found: {found:?}")]
     InvaildTokenKind {
@@ -28,6 +28,7 @@ pub(crate) enum ParseError<'src> {
 pub(crate) enum Expr<'src> {
     Number { num: f32 },
     String { text: &'src str },
+    Boolean(bool),
     Op { op: &'src str },
     PushLeft { expr: Box<Expr<'src>> },
     PushRight { expr: Box<Expr<'src>> },
@@ -38,9 +39,23 @@ impl<'src> Display for Expr<'src> {
         match self {
             Expr::Number { num } => write!(f, "Expr::Number({})", num),
             Expr::String { text } => write!(f, "Expr::String({})", text),
+            Expr::Boolean(value) => write!(f, "Expr::Boolean({})", value),
             Expr::Op { op } => write!(f, "Expr::Op({})", op),
             Expr::PushLeft { expr } => write!(f, "Expr::PushLeft({})", expr),
             Expr::PushRight { expr } => write!(f, "Expr::PushLeft({})", expr),
+        }
+    }
+}
+
+use crate::env::Object;
+
+impl<'src> Expr<'src> {
+    pub fn to_object(self) -> crate::env::Object {
+        match self {
+            Expr::Number { num } => Object::Number { num },
+            Expr::String { text } => Object::String { text: text.to_string() },
+            Expr::Boolean(value) => Object::Boolean { value },
+            _ => unreachable!("only literal expression can be converted to object."),
         }
     }
 }
@@ -143,6 +158,14 @@ impl<'src> Parser<'src> {
                         expr: Box::new(Expr::Number { num }),
                     }),
 
+                    TokenKind::String { text } => Ok(Expr::PushLeft {
+                        expr: Box::new(Expr::String { text }),
+                    }),
+
+                    TokenKind::Boolean(value) => Ok(Expr::PushLeft {
+                        expr: Box::new(Expr::Boolean(value)),
+                    }),
+
                     TokenKind::Keyword { kw } => match &kw {
                         &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"while" | &"eq" => {
                             Ok(Expr::PushLeft {
@@ -167,45 +190,44 @@ impl<'src> Parser<'src> {
 
             TokenKind::Keyword { kw } => match &kw {
                 &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"while" | &"eq" => {
-                    match self.lexer.next() {
-                        Some(op) => match op.as_ref().unwrap().kind {
-                            TokenKind::Sym { sym: "!" } => Ok(Expr::PushRight {
-                                expr: Box::new(Expr::Op { op: kw }),
-                            }),
-
-                            _ => Err(ParseError::InvaildOpKind { found: op.unwrap().clone() }),
-                        },
-                        None => Err(ParseError::MissingOp),
-                    }
+                    self.expect(TokenKind::Sym { sym: "!" })?;
+                    Ok(Expr::PushRight {
+                        expr: Box::new(Expr::Op { op: kw }),
+                    })
                 }
                 _ => unreachable!(),
             },
 
             TokenKind::Sym { sym } => match &sym {
-                &"+" | &"-" | &"%" | &"<" | &">" => match self.lexer.next() {
-                    Some(op) => match op.as_ref().unwrap().kind {
-                        TokenKind::Sym { sym: "!" } => Ok(Expr::PushRight {
-                            expr: Box::new(Expr::Op { op: sym }),
-                        }),
-
-                        _ => Err(ParseError::InvaildOpKind { found: op.unwrap().clone() }),
-                    },
-                    None => Err(ParseError::MissingOp),
+                &"+" | &"-" | &"%" | &"<" | &">" => {
+                    self.expect(TokenKind::Sym { sym: "!" })?;
+                    Ok(Expr::PushRight{
+                        expr: Box::new(Expr::Op { op: sym }),
+                    })
                 },
                 _ => unreachable!("this: {:?}", tok),
             },
 
-            TokenKind::Number { num, .. } => match self.lexer.next() {
-                None => unreachable!(),
-                Some(arg) => {
-                    let tok = arg.as_ref().unwrap();
-                    match tok.kind {
-                        TokenKind::Sym { sym: "!" } => Ok(Expr::PushRight {
-                            expr: Box::new(Expr::Number { num }),
-                        }),
-                        _ => Err(ParseError::InvaildOpKind { found: arg.unwrap().clone() }),
-                    }
-                },
+            TokenKind::Number { num, .. } => {
+                // TODO: Provide more context, error like expecting a right op
+                self.expect(TokenKind::Sym { sym: "!" })?;
+                Ok(Expr::PushRight {
+                    expr: Box::new(Expr::Number { num }),
+                })
+            },
+
+            TokenKind::String { text } => {
+                self.expect(TokenKind::Sym { sym: "!" })?;
+                Ok(Expr::PushRight {
+                    expr: Box::new(Expr::String { text }),
+                })
+            }
+
+            TokenKind::Boolean(value) => {
+                self.expect(TokenKind::Sym { sym: "!" })?;
+                Ok(Expr::PushRight {
+                    expr: Box::new(Expr::Boolean(value)),
+                })
             },
 
             _ => unreachable!(),
@@ -328,7 +350,7 @@ impl<'src> Parser<'src> {
 
         while let Some(tok) = self.lexer.peek() {
             match tok {
-                Err(e) => panic!("{:?}", e),
+                Err(e) => panic!("lexer error: {:?}", e),
                 Ok(tok) => {
                     if tok.kind == TokenKind::Eof {
                         break;

@@ -1,12 +1,9 @@
-use crate::env::Env;
+use crate::env::{Env, Object};
 use crate::parser::{Expr, Parser, Stmt};
 
-#[derive(thiserror::Error, Debug, PartialEq)]
-enum EvalError {
-    #[error("missing argument")]
-    MissingArg
-}
-
+// --------------------------------------------------------------------------
+//                          - Eval -
+// --------------------------------------------------------------------------
 pub struct Eval<'a> {
     env: &'a mut Env,
 }
@@ -19,7 +16,14 @@ impl<'a, 'src> Eval<'a> {
     fn eval_expr(&mut self, expr: &Expr<'src>) {
         match expr {
             Expr::PushLeft { expr } => match **expr {
-                Expr::Number { num } => self.env.deque.push_front(num),
+                ////////////////////////////////
+                // ~ Literals
+                Expr::Number { num } => self.env.deque.push_front(Object::Number { num }),
+                Expr::String { text } => self.env.deque.push_front(Object::String { text: text.to_string() }),
+                Expr::Boolean(value) => self.env.deque.push_front(Object::Boolean { value }),
+
+                ////////////////////////////////
+                // ~ Ops/Builtin
                 Expr::Op { op } => match op {
                     "dup" => {
                         let dup = self.env.deque.front().unwrap();
@@ -47,17 +51,17 @@ impl<'a, 'src> Eval<'a> {
                     "+" => {
                         let a = self.env.deque.pop_front().unwrap();
                         let b = self.env.deque.pop_front().unwrap();
-                        self.env.deque.push_front(b + a);
+                        self.env.deque.push_front(Object::Number { num: b.unwrap_num() + a.unwrap_num() });
                     }
                     "-" => {
                         let a = self.env.deque.pop_front().unwrap();
                         let b = self.env.deque.pop_front().unwrap();
-                        self.env.deque.push_front(b - a);
+                        self.env.deque.push_front(Object::Number { num: b.unwrap_num() - a.unwrap_num() });
                     }
                     "%" => {
                         let a = self.env.deque.pop_front().unwrap();
                         let b = self.env.deque.pop_front().unwrap();
-                        self.env.deque.push_front(b % a);
+                        self.env.deque.push_front(Object::Number { num: b.unwrap_num() % a.unwrap_num() });
                     }
 
                     // --------------------------------------------------------------------------
@@ -68,9 +72,9 @@ impl<'a, 'src> Eval<'a> {
                         let b = self.env.deque.pop_front().unwrap();
 
                         if a == b {
-                            self.env.deque.push_front(1.0);
+                            self.env.deque.push_front(Object::Boolean { value: true });
                         } else {
-                            self.env.deque.push_front(0.0);
+                            self.env.deque.push_front(Object::Boolean { value: false });
                         }
                     }
                     ">" => {
@@ -78,9 +82,9 @@ impl<'a, 'src> Eval<'a> {
                         let b = self.env.deque.pop_front().unwrap();
 
                         if a > b {
-                            self.env.deque.push_front(1.0);
+                            self.env.deque.push_front(Object::Boolean { value: true });
                         } else {
-                            self.env.deque.push_front(0.0);
+                            self.env.deque.push_front(Object::Boolean { value: false });
                         }
                     }
                     "<" => {
@@ -88,9 +92,9 @@ impl<'a, 'src> Eval<'a> {
                         let b = self.env.deque.pop_front().unwrap();
 
                         if a < b {
-                            self.env.deque.push_front(1.0);
+                            self.env.deque.push_front(Object::Boolean { value: true });
                         } else {
-                            self.env.deque.push_front(0.0);
+                            self.env.deque.push_front(Object::Boolean { value: false });
                         }
                     }
 
@@ -100,7 +104,14 @@ impl<'a, 'src> Eval<'a> {
             },
 
             Expr::PushRight { expr } => match **expr {
-                Expr::Number { num } => self.env.deque.push_back(num),
+                ////////////////////////////////
+                // ~ Literals
+                Expr::Number { num } => self.env.deque.push_back(Object::Number { num }),
+                Expr::String { text } => self.env.deque.push_back(Object::String { text: text.to_string() }),
+                Expr::Boolean(value) => self.env.deque.push_back(Object::Boolean { value }),
+
+                ////////////////////////////////
+                // ~ Ops/Builtins
                 Expr::Op { op } => match op {
                     "dup" => {
                         let dup = self.env.deque.back().unwrap();
@@ -128,17 +139,17 @@ impl<'a, 'src> Eval<'a> {
                     "+" => {
                         let a = self.env.deque.pop_back().unwrap();
                         let b = self.env.deque.pop_back().unwrap();
-                        self.env.deque.push_back(b + a);
+                        self.env.deque.push_back(Object::Number { num: b.unwrap_num() + a.unwrap_num() });
                     }
                     "-" => {
                         let a = self.env.deque.pop_back().unwrap();
                         let b = self.env.deque.pop_back().unwrap();
-                        self.env.deque.push_back(b - a);
+                        self.env.deque.push_back(Object::Number { num: b.unwrap_num() - a.unwrap_num() });
                     }
                     "%" => {
                         let a = self.env.deque.pop_back().unwrap();
                         let b = self.env.deque.pop_back().unwrap();
-                        self.env.deque.push_back(b % a);
+                        self.env.deque.push_back(Object::Number { num: b.unwrap_num() % a.unwrap_num() });
                     }
 
                     // --------------------------------------------------------------------------
@@ -149,9 +160,9 @@ impl<'a, 'src> Eval<'a> {
                         let b = self.env.deque.pop_back().unwrap();
 
                         if a == b {
-                            self.env.deque.push_back(1.0);
+                            self.env.deque.push_front(Object::Boolean { value: true });
                         } else {
-                            self.env.deque.push_back(0.0);
+                            self.env.deque.push_front(Object::Boolean { value: false });
                         }
                     }
                     ">" => {
@@ -159,9 +170,9 @@ impl<'a, 'src> Eval<'a> {
                         let b = self.env.deque.pop_back().unwrap();
 
                         if a > b {
-                            self.env.deque.push_back(1.0);
+                            self.env.deque.push_front(Object::Boolean { value: true });
                         } else {
-                            self.env.deque.push_back(0.0);
+                            self.env.deque.push_front(Object::Boolean { value: false });
                         }
                     }
                     "<" => {
@@ -169,9 +180,9 @@ impl<'a, 'src> Eval<'a> {
                         let b = self.env.deque.pop_back().unwrap();
 
                         if a < b {
-                            self.env.deque.push_back(1.0);
+                            self.env.deque.push_front(Object::Boolean { value: true });
                         } else {
-                            self.env.deque.push_back(0.0);
+                            self.env.deque.push_front(Object::Boolean { value: false });
                         }
                     }
 
@@ -192,13 +203,13 @@ impl<'a, 'src> Eval<'a> {
         if matches!(main, Expr::PushLeft { .. }) {
             conditions.iter().for_each(|condition| self.eval_expr(condition));
 
-            if self.env.deque.pop_front().unwrap() == 1.0 { // test
+            if self.env.deque.pop_front().unwrap().unwrap_bool() == &true { // test
                 flag = true;
             }
         } else {
             conditions.iter().for_each(|condition| self.eval_expr(condition));
 
-            if self.env.deque.pop_back().unwrap() == 1.0 { // test
+            if self.env.deque.pop_back().unwrap().unwrap_bool() == &true { // test
                 flag = true;
             }
         }
@@ -240,11 +251,11 @@ impl<'a, 'src> Eval<'a> {
 
                     // test condition
                     if matches!(main, Expr::PushLeft { .. }) {
-                        if self.env.deque.pop_front().unwrap() != 1.0 {
+                        if self.env.deque.pop_front().unwrap().unwrap_bool() == &false { // test
                             break;
                         }
                     } else {
-                        if self.env.deque.pop_back().unwrap() != 1.0 {
+                        if self.env.deque.pop_back().unwrap().unwrap_bool() == &false { // test
                             break;
                         }
                     }
@@ -282,7 +293,7 @@ mod tests {
         let mut env = Env::new();
         let mut eval = Eval::new(&mut env);
         assert!(eval.eval("!1 !2 !+ !dup !print").is_ok());
-        assert_eq!(env.deque, VecDeque::from([3.0]));
+        assert_eq!(env.deque, VecDeque::from([Object::Number { num: 3.0 }]));
     }
 
     #[test]
@@ -290,15 +301,15 @@ mod tests {
         {
             let mut env = Env::new();
             let mut eval = Eval::new(&mut env);
-            assert!(eval.eval("!if !1 { !1 !2 !+ }").is_ok());
-            assert_eq!(env.deque, VecDeque::from([3.0]));
+            assert!(eval.eval("!if !true { !1 !2 !+ }").is_ok());
+            assert_eq!(env.deque, VecDeque::from([Object::Number { num: 3.0 }]));
         }
 
         {
             let mut env = Env::new();
             let mut eval = Eval::new(&mut env);
             assert!(eval.eval("!0 !if !1 !eq { !1 !2 !+ } else { !2 !1 !- }").is_ok());
-            assert_eq!(env.deque, VecDeque::from([1.0]));
+            assert_eq!(env.deque, VecDeque::from([Object::Number { num: 1.0 }]));
         }
 
         {
@@ -314,7 +325,7 @@ mod tests {
                     !2 !1 !-
                 }
             ").is_ok());
-            assert_eq!(env.deque, VecDeque::from([99.0]));
+            assert_eq!(env.deque, VecDeque::from([Object::Number { num: 99.0 }]));
         }
     }
 
@@ -334,7 +345,7 @@ mod tests {
             .is_ok());
         assert_eq!(
             env.deque,
-            VecDeque::from([10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0])
+            VecDeque::from([Object::Number { num: 10.0 },Object::Number { num:  9.0 },Object::Number { num:  8.0 },Object::Number { num:  7.0 },Object::Number { num:  6.0 },Object::Number { num:  5.0 },Object::Number { num:  4.0 },Object::Number { num:  3.0 },Object::Number { num:  2.0 },Object::Number { num:  1.0 }])
         );
     }
 }

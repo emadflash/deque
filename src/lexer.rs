@@ -21,6 +21,7 @@ pub(crate) enum TokenKind<'src> {
     Keyword { kw: &'src str },
     Number { text: &'src str, num: f32 },
     String { text: &'src str },
+    Boolean(bool),
     Eof,
 }
 
@@ -53,6 +54,7 @@ impl<'src> fmt::Display for TokenKind<'src> {
             TokenKind::Keyword { kw } => write!(f, "TokenKind::Keyword({})", kw),
             TokenKind::Number { text, .. } => write!(f, "TokenKind::Number({})", text),
             TokenKind::String { text } => write!(f, "TokenKind::String({})", text),
+            TokenKind::Boolean(val) => write!(f, "TokenKind::Boolean({})", val),
             TokenKind::Eof => write!(f, "TokenKind::Eof"),
         }
     }
@@ -222,6 +224,9 @@ impl<'src> Lexer<'src> {
                     let tok = match text {
                         "dup" | "pud" | "drop" | "print" | "println" | "if" | "elif" | "else" | "while"
                         | "eq" => TokenKind::Keyword { kw: text }.to_token((self.row, self.col)),
+
+                        "true" => TokenKind::Boolean(true).to_token((self.row, self.col)),
+                        "false" => TokenKind::Boolean(false).to_token((self.row, self.col)),
                         _ => TokenKind::Iden { iden: text }.to_token((self.row, self.col))
                     };
 
