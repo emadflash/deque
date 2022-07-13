@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
-use crate::env::{Env, Object};
+use crate::env::Env;
+use crate::object::{object, Object};
 use crate::parser::Parser;
 use crate::ast::{Expr, Stmt};
 
@@ -41,9 +42,9 @@ impl<'a, 'src> Eval<'a> {
             Expr::PushLeft { expr } => match **expr {
                 ////////////////////////////////
                 // ~ Literals
-                Expr::Number { num } => self.deque.push_front(Object::Number { num }),
-                Expr::String { text } => self.deque.push_front(Object::String { text: text.to_string() }),
-                Expr::Boolean(value) => self.deque.push_front(Object::Boolean { value }),
+                Expr::Number { num } => self.deque.push_front(object::number!(num)),
+                Expr::String { text } => self.deque.push_front(object::string!(text.to_string())),
+                Expr::Boolean(value) => self.deque.push_front(object::boolean!(value)),
 
                 ////////////////////////////////
                 // ~ Ops/Builtins
@@ -56,6 +57,10 @@ impl<'a, 'src> Eval<'a> {
                     }
                     "drop" => {
                         let _ = self.deque_pop_front()?;
+                    }
+                    "inc" => {
+                    }
+                    "dec" => {
                     }
                     "print" => {
                         let dup = self.deque_pop_front()?;
@@ -72,17 +77,17 @@ impl<'a, 'src> Eval<'a> {
                     "+" => {
                         let a = self.deque_pop_front()?;
                         let b = self.deque_pop_front()?;
-                        self.deque.push_front(Object::Number { num: b.unwrap_num() + a.unwrap_num() });
+                        self.deque.push_front(object::number!(b.unwrap_num() + a.unwrap_num()));
                     }
                     "-" => {
                         let a = self.deque_pop_front()?;
                         let b = self.deque_pop_front()?;
-                        self.deque.push_front(Object::Number { num: b.unwrap_num() - a.unwrap_num() });
+                        self.deque.push_front(object::number!(b.unwrap_num() - a.unwrap_num()));
                     }
                     "%" => {
                         let a = self.deque_pop_front()?;
                         let b = self.deque_pop_front()?;
-                        self.deque.push_front(Object::Number { num: b.unwrap_num() % a.unwrap_num() });
+                        self.deque.push_front(object::number!(b.unwrap_num() % a.unwrap_num()));
                     }
 
                     // --------------------------------------------------------------------------
@@ -93,9 +98,9 @@ impl<'a, 'src> Eval<'a> {
                         let b = self.deque_pop_front()?;
 
                         if a == b {
-                            self.deque.push_front(Object::Boolean { value: true });
+                            self.deque.push_front(object::boolean!(true));
                         } else {
-                            self.deque.push_front(Object::Boolean { value: false });
+                            self.deque.push_front(object::boolean!(false));
                         }
                     }
                     ">" => {
@@ -103,9 +108,9 @@ impl<'a, 'src> Eval<'a> {
                         let b = self.deque_pop_front()?;
 
                         if a > b {
-                            self.deque.push_front(Object::Boolean { value: true });
+                            self.deque.push_front(object::boolean!(true));
                         } else {
-                            self.deque.push_front(Object::Boolean { value: false });
+                            self.deque.push_front(object::boolean!(false));
                         }
                     }
                     "<" => {
@@ -113,9 +118,9 @@ impl<'a, 'src> Eval<'a> {
                         let b = self.deque_pop_front()?;
 
                         if a < b {
-                            self.deque.push_front(Object::Boolean { value: true });
+                            self.deque.push_front(object::boolean!(true));
                         } else {
-                            self.deque.push_front(Object::Boolean { value: false });
+                            self.deque.push_front(object::boolean!(false));
                         }
                     }
 
@@ -127,9 +132,9 @@ impl<'a, 'src> Eval<'a> {
             Expr::PushRight { expr } => match **expr {
                 ////////////////////////////////
                 // ~ Literals
-                Expr::Number { num } => self.deque.push_back(Object::Number { num }),
-                Expr::String { text } => self.deque.push_back(Object::String { text: text.to_string() }),
-                Expr::Boolean(value) => self.deque.push_back(Object::Boolean { value }),
+                Expr::Number { num } => self.deque.push_back(object::number!(num)),
+                Expr::String { text } => self.deque.push_back(object::string!(text.to_string())),
+                Expr::Boolean(value) => self.deque.push_back(object::boolean!(value)),
 
                 ////////////////////////////////
                 // ~ Ops/Builtins
@@ -158,17 +163,17 @@ impl<'a, 'src> Eval<'a> {
                     "+" => {
                         let a = self.deque_pop_back()?;
                         let b = self.deque_pop_back()?;
-                        self.deque.push_back(Object::Number { num: b.unwrap_num() + a.unwrap_num() });
+                        self.deque.push_back(object::number!(b.unwrap_num() + a.unwrap_num()));
                     }
                     "-" => {
                         let a = self.deque_pop_back()?;
                         let b = self.deque_pop_back()?;
-                        self.deque.push_back(Object::Number { num: b.unwrap_num() - a.unwrap_num() });
+                        self.deque.push_back(object::number!(b.unwrap_num() - a.unwrap_num()));
                     }
                     "%" => {
                         let a = self.deque_pop_back()?;
                         let b = self.deque_pop_back()?;
-                        self.deque.push_back(Object::Number { num: b.unwrap_num() % a.unwrap_num() });
+                        self.deque.push_back(object::number!(b.unwrap_num() % a.unwrap_num()));
                     }
 
                     // --------------------------------------------------------------------------
@@ -179,9 +184,9 @@ impl<'a, 'src> Eval<'a> {
                         let b = self.deque_pop_back()?;
 
                         if a == b {
-                            self.deque.push_front(Object::Boolean { value: true });
+                            self.deque.push_front(object::boolean!(true));
                         } else {
-                            self.deque.push_front(Object::Boolean { value: false });
+                            self.deque.push_front(object::boolean!(false));
                         }
                     }
                     ">" => {
@@ -189,9 +194,9 @@ impl<'a, 'src> Eval<'a> {
                         let b = self.deque_pop_back()?;
 
                         if a > b {
-                            self.deque.push_front(Object::Boolean { value: true });
+                            self.deque.push_front(object::boolean!(true));
                         } else {
-                            self.deque.push_front(Object::Boolean { value: false });
+                            self.deque.push_front(object::boolean!(false));
                         }
                     }
                     "<" => {
@@ -199,9 +204,9 @@ impl<'a, 'src> Eval<'a> {
                         let b = self.deque_pop_back()?;
 
                         if a < b {
-                            self.deque.push_front(Object::Boolean { value: true });
+                            self.deque.push_front(object::boolean!(true));
                         } else {
-                            self.deque.push_front(Object::Boolean { value: false });
+                            self.deque.push_front(object::boolean!(false));
                         }
                     }
 
@@ -331,7 +336,7 @@ mod tests {
         let mut env = Env::new();
         let mut eval = Eval::new(&mut env);
         assert!(eval.eval("!1 !2 !+ !dup !print").is_ok());
-        assert_eq!(eval.deque, VecDeque::from([Object::Number { num: 3.0 }]));
+        assert_eq!(eval.deque, VecDeque::from([object::number!(3.0)]));
     }
 
     #[test]
@@ -340,14 +345,14 @@ mod tests {
             let mut env = Env::new();
             let mut eval = Eval::new(&mut env);
             assert!(eval.eval("!if !true { !1 !2 !+ }").is_ok());
-            assert_eq!(eval.deque, VecDeque::from([Object::Number { num: 3.0 }]));
+            assert_eq!(eval.deque, VecDeque::from([object::number!(3.0)]));
         }
 
         {
             let mut env = Env::new();
             let mut eval = Eval::new(&mut env);
             assert!(eval.eval("!0 !if !1 !eq { !1 !2 !+ } else { !2 !1 !- }").is_ok());
-            assert_eq!(eval.deque, VecDeque::from([Object::Number { num: 1.0 }]));
+            assert_eq!(eval.deque, VecDeque::from([object::number!(1.0)]));
         }
 
         {
@@ -363,7 +368,7 @@ mod tests {
                     !2 !1 !-
                 }
             ").is_ok());
-            assert_eq!(eval.deque, VecDeque::from([Object::Number { num: 99.0 }]));
+            assert_eq!(eval.deque, VecDeque::from([object::number!(99.0)]));
         }
     }
 
@@ -383,7 +388,9 @@ mod tests {
             .is_ok());
         assert_eq!(
             eval.deque,
-            VecDeque::from([Object::Number { num: 10.0 },Object::Number { num:  9.0 },Object::Number { num:  8.0 },Object::Number { num:  7.0 },Object::Number { num:  6.0 },Object::Number { num:  5.0 },Object::Number { num:  4.0 },Object::Number { num:  3.0 },Object::Number { num:  2.0 },Object::Number { num:  1.0 }])
+            VecDeque::from([
+                object::number!(10.0), object::number!(9.0), object::number!(8.0), object::number!(7.0), object::number!(6.0), object::number!(5.0),
+                object::number!(4.0), object::number!(3.0), object::number!(2.0), object::number!(1.0)])
         );
     }
 }

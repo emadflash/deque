@@ -90,7 +90,7 @@ impl<'src> Parser<'src> {
                     }),
 
                     TokenKind::Keyword { kw } => match &kw {
-                        &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"while" | &"eq" => {
+                        &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"while" | &"eq" | &"inc" | &"dec" => {
                             Ok(Expr::PushLeft {
                                 expr: Box::new(Expr::Op { op: kw }),
                             })
@@ -112,7 +112,7 @@ impl<'src> Parser<'src> {
             },
 
             TokenKind::Keyword { kw } => match &kw {
-                &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"while" | &"eq" => {
+                &"dup" | &"pud" | &"drop" | &"print" | &"println" | &"if" | &"while" | &"eq" | &"inc" | &"dec" => {
                     self.expect(TokenKind::Sym { sym: "!" })?;
                     Ok(Expr::PushRight {
                         expr: Box::new(Expr::Op { op: kw }),
@@ -277,7 +277,7 @@ mod tests {
     use super::*;
 
     macro_rules! program {
-       ($a:expr )=> {
+        ($a:expr )=> {
            Stmt::Program { stmts: $a }
        }
     }
