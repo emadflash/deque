@@ -16,5 +16,5 @@
         !dup !println
     }
 
-    !dup !1 !+
+    !dup !inc
 }

@@ -5,5 +5,6 @@ Deque based programming language
 - [X] if-stmt (if, if-elif, if-elif-else, if-else)
 - [X] while stmt
 - [ ] variables
-- [ ] consts
-- [ ] functions
+- [ ] functions/procedures
+- [ ] structs
+- [ ] c like macros

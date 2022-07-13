@@ -4,6 +4,6 @@
 !dup !println
 
 !while !dup !10 !> {
-    !dup !1 !+
+    !dup !inc
     !dup !println
 }

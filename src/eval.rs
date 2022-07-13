@@ -31,9 +31,11 @@ impl<'a, 'src> Eval<'a> {
     }
 
     ////////////////////////////////
-    // ~ Deque Manupilation
+    // ~ Deque Manupilation (Abstraction)
     #[inline] fn deque_front(&self) -> Result<&Object, EvalError> { self.deque.front().ok_or(EvalError::MissingArgument) }
     #[inline] fn deque_back(&self) -> Result<&Object, EvalError> { self.deque.back().ok_or(EvalError::MissingArgument) }
+    #[inline] fn deque_front_mut(&mut self) -> Result<&mut Object, EvalError> { self.deque.front_mut().ok_or(EvalError::MissingArgument) }
+    #[inline] fn deque_back_mut(&mut self) -> Result<&mut Object, EvalError> { self.deque.back_mut().ok_or(EvalError::MissingArgument) }
     #[inline] fn deque_pop_front(&mut self) -> Result<Object, EvalError> { self.deque.pop_front().ok_or(EvalError::MissingArgument) }
     #[inline] fn deque_pop_back(&mut self) -> Result<Object, EvalError> { self.deque.pop_back().ok_or(EvalError::MissingArgument) }
     
@@ -52,15 +54,16 @@ impl<'a, 'src> Eval<'a> {
                     "dup" => {
                         self.deque.push_front(self.deque_front()?.clone());
                     }
-                    "pud" => {
-                        self.deque.push_back(self.deque_front()?.clone());
-                    }
                     "drop" => {
                         let _ = self.deque_pop_front()?;
                     }
                     "inc" => {
+                        let a = self.deque_front_mut()?.get_num_mut();
+                        *a += 1.0;
                     }
                     "dec" => {
+                        let a = self.deque_front_mut()?.get_num_mut();
+                        *a -= 1.0;
                     }
                     "print" => {
                         let dup = self.deque_pop_front()?;
@@ -77,17 +80,17 @@ impl<'a, 'src> Eval<'a> {
                     "+" => {
                         let a = self.deque_pop_front()?;
                         let b = self.deque_pop_front()?;
-                        self.deque.push_front(object::number!(b.unwrap_num() + a.unwrap_num()));
+                        self.deque.push_front(object::number!(b.get_num() + a.get_num()));
                     }
                     "-" => {
                         let a = self.deque_pop_front()?;
                         let b = self.deque_pop_front()?;
-                        self.deque.push_front(object::number!(b.unwrap_num() - a.unwrap_num()));
+                        self.deque.push_front(object::number!(b.get_num() - a.get_num()));
                     }
                     "%" => {
                         let a = self.deque_pop_front()?;
                         let b = self.deque_pop_front()?;
-                        self.deque.push_front(object::number!(b.unwrap_num() % a.unwrap_num()));
+                        self.deque.push_front(object::number!(b.get_num() % a.get_num()));
                     }
 
                     // --------------------------------------------------------------------------
@@ -142,11 +145,16 @@ impl<'a, 'src> Eval<'a> {
                     "dup" => {
                         self.deque.push_back(self.deque_back()?.clone());
                     }
-                    "pud" => {
-                        self.deque.push_front(self.deque_back()?.clone());
-                    }
                     "drop" => {
                         let _ = self.deque_pop_back()?;
+                    }
+                    "inc" => {
+                        let a = self.deque_back_mut()?.get_num_mut();
+                        *a += 1.0;
+                    }
+                    "dec" => {
+                        let a = self.deque_back_mut()?.get_num_mut();
+                        *a -= 1.0;
                     }
                     "print" => {
                         let dup = self.deque_pop_back()?;
@@ -163,17 +171,17 @@ impl<'a, 'src> Eval<'a> {
                     "+" => {
                         let a = self.deque_pop_back()?;
                         let b = self.deque_pop_back()?;
-                        self.deque.push_back(object::number!(b.unwrap_num() + a.unwrap_num()));
+                        self.deque.push_back(object::number!(b.get_num() + a.get_num()));
                     }
                     "-" => {
                         let a = self.deque_pop_back()?;
                         let b = self.deque_pop_back()?;
-                        self.deque.push_back(object::number!(b.unwrap_num() - a.unwrap_num()));
+                        self.deque.push_back(object::number!(b.get_num() - a.get_num()));
                     }
                     "%" => {
                         let a = self.deque_pop_back()?;
                         let b = self.deque_pop_back()?;
-                        self.deque.push_back(object::number!(b.unwrap_num() % a.unwrap_num()));
+                        self.deque.push_back(object::number!(b.get_num() % a.get_num()));
                     }
 
                     // --------------------------------------------------------------------------
@@ -239,7 +247,7 @@ impl<'a, 'src> Eval<'a> {
                 self.eval_expr(condition)?;
             }
 
-            if self.deque_pop_front()?.unwrap_bool() == &true { // test
+            if self.deque_pop_front()?.get_bool() == &true { // test
                 flag = true;
             }
         } else {
@@ -247,7 +255,7 @@ impl<'a, 'src> Eval<'a> {
                 self.eval_expr(condition)?;
             }
 
-            if self.deque_pop_back()?.unwrap_bool() == &true { // test
+            if self.deque_pop_back()?.get_bool() == &true { // test
                 flag = true;
             }
         }
@@ -287,11 +295,11 @@ impl<'a, 'src> Eval<'a> {
 
             // test condition
             if matches!(main, Expr::PushLeft { .. }) {
-                if self.deque_pop_front()?.unwrap_bool() == &false { // test
+                if self.deque_pop_front()?.get_bool() == &false { // test
                     break;
                 }
             } else {
-                if self.deque_pop_back()?.unwrap_bool() == &false { // test
+                if self.deque_pop_back()?.get_bool() == &false { // test
                     break;
                 }
             }
@@ -381,7 +389,7 @@ mod tests {
                 "
                 !1
                 !while !dup !10 !> {
-                    !dup !1 !+
+                    !dup !inc
                 }
                 "
             )

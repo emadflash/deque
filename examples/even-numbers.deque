@@ -9,5 +9,5 @@
         !dup !println
     }
     
-    !1 !+
+    !inc
 }

@@ -4,17 +4,17 @@ use std::{fmt, fmt::Display};
 // ~ Helper macros
 pub mod object {
     macro_rules! number {
-        ($a:expr )=> {
+        ($a:expr) => {
             Object::Number { num: $a }
         }
     }
     macro_rules! string {
-        ($a:expr )=> {
+        ($a:expr) => {
             Object::String { text: $a }
         }
     }
     macro_rules! boolean {
-        ($a:expr )=> {
+        ($a:expr) => {
             Object::Boolean { value: $a }
         }
     }
@@ -35,23 +35,44 @@ pub enum Object {
 }
 
 impl Object {
-    pub fn unwrap_num(&self) -> &f32 {
+    pub fn get_num(&self) -> &f32 {
         match self {
             Object::Number { num } => &num,
             _ => unreachable!(),
         }
     }
 
-    pub fn unwrap_string(&self) -> &String {
+    pub fn get_string(&self) -> &String {
         match self {
             Object::String { text } => &text,
             _ => unreachable!(),
         }
     }
 
-    pub fn unwrap_bool(&self) -> &bool {
+    pub fn get_bool(&self) -> &bool {
         match self {
             Object::Boolean { value } => &value,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn get_num_mut(&mut self) -> &mut f32 {
+        match self {
+            Object::Number { ref mut num } => num,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn get_string_mut(&mut self) -> &mut String {
+        match self {
+            Object::String { ref mut text } => text,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn get_bool_mut(&mut self) -> &mut bool {
+        match self {
+            Object::Boolean { ref mut value } => value,
             _ => unreachable!(),
         }
     }
