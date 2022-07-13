@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut eval = Eval::new(&mut env);
 
     let src = fs::read_to_string(&args[0])?;
-    eval.eval(&src).unwrap();
+    eval.eval(&src)?;
 
     Ok(())
 }

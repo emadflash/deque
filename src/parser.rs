@@ -1,8 +1,11 @@
-use std::{fmt, fmt::Display};
 use std::iter::Peekable;
 
-use crate::lexer::{TokenKind, Token, Lexer, LexerError};
+use crate::lexer::{TokenKind, Lexer, LexerError};
+use crate::ast::{Expr, Stmt};
 
+// --------------------------------------------------------------------------
+//                          - ParseError -
+// --------------------------------------------------------------------------
 #[derive(thiserror::Error, Debug, PartialEq)]
 pub(crate) enum ParseError<'src> {
     #[error("lexer error")]
@@ -10,9 +13,6 @@ pub(crate) enum ParseError<'src> {
 
     #[error("missing expression")]
     MissingExpr,
-
-    #[error("missing op")]
-    MissingOp,
 
     #[error("invaild token kind (expected: {expected:?}, found: {found:?}")]
     InvaildTokenKind {
@@ -24,84 +24,6 @@ pub(crate) enum ParseError<'src> {
 impl<'src> From<&LexerError> for ParseError<'src> {
     fn from(e: &LexerError) -> Self {
         ParseError::LexerError(e.clone())
-    }
-}
-
-// --------------------------------------------------------------------------
-//                          - Expr -
-// --------------------------------------------------------------------------
-#[derive(Debug, PartialEq, Clone)]
-pub(crate) enum Expr<'src> {
-    Number { num: f32 },
-    String { text: &'src str },
-    Boolean(bool),
-    Op { op: &'src str },
-    PushLeft { expr: Box<Expr<'src>> },
-    PushRight { expr: Box<Expr<'src>> },
-}
-
-impl<'src> Display for Expr<'src> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Expr::Number { num } => write!(f, "Expr::Number({})", num),
-            Expr::String { text } => write!(f, "Expr::String({})", text),
-            Expr::Boolean(value) => write!(f, "Expr::Boolean({})", value),
-            Expr::Op { op } => write!(f, "Expr::Op({})", op),
-            Expr::PushLeft { expr } => write!(f, "Expr::PushLeft({})", expr),
-            Expr::PushRight { expr } => write!(f, "Expr::PushLeft({})", expr),
-        }
-    }
-}
-
-use crate::env::Object;
-
-impl<'src> Expr<'src> {
-    pub fn to_object(self) -> crate::env::Object {
-        match self {
-            Expr::Number { num } => Object::Number { num },
-            Expr::String { text } => Object::String { text: text.to_string() },
-            Expr::Boolean(value) => Object::Boolean { value },
-            _ => unreachable!("only literal expression can be converted to object."),
-        }
-    }
-}
-
-// --------------------------------------------------------------------------
-//                          - Stmt -
-// --------------------------------------------------------------------------
-#[derive(Debug, PartialEq)]
-pub(crate) enum Stmt<'src> {
-    Expr { expr: Expr<'src> },
-    Body { body: Vec<Stmt<'src>> },
-    If {
-        main: Expr<'src>,
-        conditions: Vec<Expr<'src>>,
-        body: Box<Stmt<'src>>,
-    },
-    IfElse {
-        master: Box<Stmt<'src>>,
-        alternates: Vec<Stmt<'src>>,
-    },
-    While {
-        main: Expr<'src>,
-        conditions: Vec<Expr<'src>>,
-        body: Box<Stmt<'src>>,
-    },
-}
-
-impl<'src> Stmt<'src> {
-    pub(crate) fn unwrap_body(&self) -> &Vec<Stmt<'src>> {
-        match self {
-            Stmt::Body { ref body } => body,
-            _ => unreachable!("unwraping body requires body!"),
-        }
-    }
-
-    pub(crate) fn unwrap_if(&self) -> (&Expr<'src>, &Vec<Expr<'src>>, &Box<Stmt<'src>>) {
-        match self {
-            Stmt::If { ref main, ref conditions, ref body } => (main, conditions, body),
-            _ => unreachable!("should be used for unwraping if-stmt")
-        }
     }
 }
 
@@ -336,7 +258,7 @@ impl<'src> Parser<'src> {
         Ok(Stmt::Expr { expr: stmt })
     }
 
-    pub(crate) fn parse(&mut self) -> anyhow::Result<Vec<Stmt<'src>>, ParseError<'src>> {
+    pub(crate) fn parse(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
         let mut stmts: Vec<Stmt> = Vec::new();
 
         while let Some(tok) = self.lexer.peek() {
@@ -346,7 +268,7 @@ impl<'src> Parser<'src> {
             stmts.push(self.parse_stmt()?);
         }
 
-        Ok(stmts)
+        Ok(Stmt::Program { stmts })
     }
 }
 
@@ -354,13 +276,19 @@ impl<'src> Parser<'src> {
 mod tests {
     use super::*;
 
+    macro_rules! program {
+       ($a:expr )=> {
+           Stmt::Program { stmts: $a }
+       }
+    }
+
     #[test]
     fn parse_miscellaneous_exprs() {
         let text: &str = "!+ !- !2 !- dup! !> <!";
         let mut parser = Parser::new(text).unwrap();
         assert_eq!(
             parser.parse(),
-            Ok(vec![
+            Ok(program!(vec![
                 Stmt::Expr {
                     expr: Expr::PushLeft {
                         expr: Box::new(Expr::Op { op: "+" })
@@ -396,7 +324,7 @@ mod tests {
                         expr: Box::new(Expr::Op { op: "<" })
                     }
                 },
-            ])
+            ]))
         );
     }
 
@@ -406,7 +334,7 @@ mod tests {
         let mut parser = Parser::new(text).unwrap();
         assert_eq!(
             parser.parse(),
-            Ok(vec![
+            Ok(program!(vec![
                 Stmt::If {
                     main: Expr::PushLeft {
                         expr: Box::new(Expr::Op { op: "if" })
@@ -436,7 +364,7 @@ mod tests {
                         expr: Box::new(Expr::Number { num: 69.0 })
                     }
                 },
-            ])
+            ]))
         );
     }
 
@@ -446,7 +374,7 @@ mod tests {
         let mut parser = Parser::new(text).unwrap();
         assert_eq!(
             parser.parse(),
-            Ok(vec![
+            Ok(program!(vec![
                 Stmt::IfElse {
                     master: Box::new(Stmt::If {
                         main: Expr::PushLeft {
@@ -500,7 +428,7 @@ mod tests {
                         expr: Box::new(Expr::Op { op: "eq" }),
                     },
                 }
-            ])
+            ]))
         );
     }
 
@@ -512,7 +440,7 @@ mod tests {
         let mut parser = Parser::new(text).unwrap();
         assert_eq!(
             parser.parse(),
-            Ok(vec![
+            Ok(program!(vec![
                 Stmt::IfElse {
                     master: Box::new(Stmt::If {
                         main: Expr::PushLeft {
@@ -555,7 +483,7 @@ mod tests {
                         expr: Box::new(Expr::Op { op: "eq" }),
                     },
                 }
-            ])
+            ]))
         );
     }
 
@@ -565,9 +493,10 @@ mod tests {
         // while stmt and then moving to eat the next stmt nicely!
         let text: &str = "!while !dup { !1 } !eq";
         let mut parser = Parser::new(text).unwrap();
+
         assert_eq!(
             parser.parse(),
-            Ok(vec![Stmt::While {
+            Ok(program!(vec![Stmt::While {
                 main: Expr::PushLeft {
                     expr: Box::new(Expr::Op { op: "while" }),
                 },
@@ -589,7 +518,14 @@ mod tests {
                     expr: Box::new(Expr::Op { op: "eq" }),
                 },
             }
-            ])
+            ]))
         );
+    }
+
+    #[test]
+    fn ast_printer() {
+        let mut parser = Parser::new("!while !dup { !1 } !eq").unwrap();
+        let tree = parser.parse().unwrap();
+        eprintln!("{}", tree);
     }
 }

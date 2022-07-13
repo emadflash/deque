@@ -1,5 +1,5 @@
 use std::{fmt, fmt::Display};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 
 // --------------------------------------------------------------------------
 //                          - Object -
@@ -48,15 +48,13 @@ impl Display for Object {
 //                          - Env -
 // --------------------------------------------------------------------------
 pub struct Env {
-    labels: HashMap<String, usize>,
-    pub deque: VecDeque<Object>,
+    locals: HashMap<String, usize>,
 }
 
 impl Env {
     pub fn new() -> Self {
         Self {
-            labels: HashMap::new(),
-            deque: VecDeque::new(),
+            locals: HashMap::new(),
         }
     }
 }
