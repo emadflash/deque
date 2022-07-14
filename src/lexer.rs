@@ -2,6 +2,8 @@ use std::fmt;
 use std::iter::Peekable;
 use std::str::CharIndices;
 
+use ansi_term::Color;
+
 #[derive(thiserror::Error, Debug, PartialEq, Clone)]
 pub enum LexerError {
     #[error("missing ending quotes")]
@@ -48,14 +50,21 @@ impl<'src> TokenKind<'src> {
 impl<'src> fmt::Display for TokenKind<'src> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            TokenKind::Sym { sym } => write!(f, "TokenKind::Sym({})", sym),
-            TokenKind::Iden { iden } => write!(f, "TokenKind::Iden({})", iden),
-            TokenKind::Keyword { kw } => write!(f, "TokenKind::Keyword({})", kw),
-            TokenKind::Number { text, .. } => write!(f, "TokenKind::Number({})", text),
-            TokenKind::String { text } => write!(f, "TokenKind::String({})", text),
-            TokenKind::Boolean(val) => write!(f, "TokenKind::Boolean({})", val),
-            TokenKind::Eof => write!(f, "TokenKind::Eof"),
+            TokenKind::Sym { sym } => write!(f, "Symbol({})", sym),
+            TokenKind::Iden { iden } => write!(f, "Identifier({})", iden),
+            TokenKind::Keyword { kw } => write!(f, "Keyword({})", kw),
+            TokenKind::Number { text, .. } => write!(f, "Number({})", text),
+            TokenKind::String { text } => write!(f, "String({})", text),
+            TokenKind::Boolean(val) => write!(f, "Bool({})", val),
+            TokenKind::Eof => write!(f, "END_OF_FILE"),
         }
+    }
+}
+
+impl<'src> fmt::Display for Token<'src> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}: {}, {}: {:?}", Color::Cyan.bold().paint("KIND"), self.kind,
+            Color::Cyan.bold().paint("POS"), self.pos)
     }
 }
 
@@ -254,6 +263,22 @@ impl<'src> Iterator for Lexer<'src> {
             Some(self.next_token())
         }
     }
+}
+
+// --------------------------------------------------------------------------
+//                          - Print Lexical analysis -
+// --------------------------------------------------------------------------
+pub fn print_lexical_analysis<'src>(src: &'src str) {
+    let lexer = Lexer::new(src);
+    lexer
+        .collect::<Vec<_>>()
+        .iter()
+        .for_each(|tok| {
+            match tok {
+                Err(e) => println!("{} {}", Color::Red.bold().underline().paint("ERROR:"), e),
+                Ok(tok) => println!("{}", tok),
+            }
+        });
 }
 
 #[cfg(test)]

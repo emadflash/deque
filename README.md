@@ -9,3 +9,4 @@ Deque based programming language
 - [ ] functions/procedures
 - [ ] structs
 - [ ] c like macros
+- [ ] modules

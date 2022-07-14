@@ -3,6 +3,7 @@ use std::{error::Error, fs};
 use deque::env::Env;
 use deque::eval::Eval;
 use deque::parser::Parser;
+use deque::lexer::print_lexical_analysis;
 use deque::ast::print_ast;
 
 use clap::{App, Arg};
@@ -23,13 +24,21 @@ fn main() -> Result<(), Box<dyn Error>> {
             Arg::with_name("print_ast")
                 .short("a")
                 .long("--print-ast")
-                .help("Print abstract syntax tree (AST)")
+                .help("Prints abstract syntax tree (AST)")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("lex")
+                .short("l")
+                .long("--lex")
+                .help("Prints lexical analysis of the file")
                 .takes_value(false),
         )
         .get_matches();
 
     let source_files_path = matches.values_of_lossy("source_file").unwrap();
     let is_print_ast = matches.is_present("print_ast");
+    let is_lex = matches.is_present("lex");
 
     let source_files = source_files_path
         .iter()
@@ -40,6 +49,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut parser = Parser::new(&source_files[0]).unwrap();
         let ast = parser.parse().unwrap();
         print_ast(ast);
+    }
+
+    if is_lex {
+        print_lexical_analysis(&source_files[0]);
     } else {
         let mut env = Env::new();
         let mut eval = Eval::new(&mut env);
