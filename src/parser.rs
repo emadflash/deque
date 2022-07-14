@@ -7,14 +7,14 @@ use crate::ast::{Expr, Stmt};
 //                          - ParseError -
 // --------------------------------------------------------------------------
 #[derive(thiserror::Error, Debug, PartialEq)]
-pub(crate) enum ParseError<'src> {
-    #[error("lexer error")]
+pub enum ParseError<'src> {
+    #[error("Lexer error")]
     LexerError(#[from] LexerError),
 
-    #[error("missing expression")]
+    #[error("Missing expression")]
     MissingExpr,
 
-    #[error("invaild token kind (expected: {expected:?}, found: {found:?}")]
+    #[error("Invaild token kind (expected: {expected:?}, found: {found:?}")]
     InvaildTokenKind {
         expected: TokenKind<'src>,
         found: TokenKind<'src>,
@@ -31,12 +31,12 @@ impl<'src> From<&LexerError> for ParseError<'src> {
 //                          - Parser -
 // --------------------------------------------------------------------------
 #[derive(Debug)]
-pub(crate) struct Parser<'src> {
+pub struct Parser<'src> {
     lexer: Peekable<Lexer<'src>>
 }
 
 impl<'src> Parser<'src> {
-    pub(crate) fn new(src: &'src str) -> anyhow::Result<Parser> {
+    pub fn new(src: &'src str) -> anyhow::Result<Parser> {
         Ok(Self {
             lexer: Lexer::new(src).peekable(),
         })
@@ -45,7 +45,7 @@ impl<'src> Parser<'src> {
     // --------------------------------------------------------------------------
     //                          - Helpers -
     // --------------------------------------------------------------------------
-    pub(crate) fn match_next_token(&mut self, expected_kind: TokenKind<'src>) -> bool {
+    fn match_next_token(&mut self, expected_kind: TokenKind<'src>) -> bool {
         let tok = self.lexer.peek().expect("Token for peeking");
         match tok {
             Err(_) => false,
@@ -58,7 +58,7 @@ impl<'src> Parser<'src> {
         }
     }
 
-    pub(crate) fn expect(&mut self, expected_kind: TokenKind<'src>) -> Result<(), ParseError<'src>> {
+    fn expect(&mut self, expected_kind: TokenKind<'src>) -> Result<(), ParseError<'src>> {
         let tok = self.lexer.peek().expect("Token for peeking");
         if tok.as_ref()?.kind == expected_kind {
             self.lexer.next();
@@ -167,15 +167,10 @@ impl<'src> Parser<'src> {
         let mut body: Vec<Stmt<'src>> = Vec::new();
 
         while let Some(tok) = self.lexer.peek() {
-            match tok {
-                Err(e) => panic!("error: {:?}", e),
-                Ok(tok) => {
-                    if matches!(tok.kind, TokenKind::Sym { sym: "}" }) {
-                        break;
-                    }
-                    body.push(self.parse_stmt()?);
-                }
+            if matches!(tok.as_ref()?.kind, TokenKind::Sym { sym: "}" }) {
+                break;
             }
+            body.push(self.parse_stmt()?);
         }
 
         self.expect(TokenKind::Sym { sym: "}" })?;
@@ -258,7 +253,7 @@ impl<'src> Parser<'src> {
         Ok(Stmt::Expr { expr: stmt })
     }
 
-    pub(crate) fn parse(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
+    pub fn parse(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
         let mut stmts: Vec<Stmt> = Vec::new();
 
         while let Some(tok) = self.lexer.peek() {
@@ -520,12 +515,5 @@ mod tests {
             }
             ]))
         );
-    }
-
-    #[test]
-    fn ast_printer() {
-        let mut parser = Parser::new("!while !dup { !1 } !eq").unwrap();
-        let tree = parser.parse().unwrap();
-        eprintln!("{}", tree);
     }
 }

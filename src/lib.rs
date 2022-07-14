@@ -1,6 +1,7 @@
 pub mod eval;
 pub mod env;
 pub mod object;
-pub(crate) mod lexer;
-pub(crate) mod parser;
-pub(crate) mod ast;
+pub mod error;
+pub mod ast;
+pub mod lexer;
+pub mod parser;

@@ -1,15 +1,16 @@
 use std::collections::VecDeque;
 
 use crate::env::Env;
+use crate::error::Error;
 use crate::object::{object, Object};
 use crate::parser::Parser;
 use crate::ast::{Expr, Stmt};
 
 // --------------------------------------------------------------------------
-//                          - EvalError -
+//                          - RuntimeError -
 // --------------------------------------------------------------------------
 #[derive(Debug, thiserror::Error, PartialEq)]
-enum EvalError {
+pub enum RuntimeError {
     #[error("missing argument on deque")]
     MissingArgument,
 }
@@ -32,14 +33,14 @@ impl<'a, 'src> Eval<'a> {
 
     ////////////////////////////////
     // ~ Deque Manupilation (Abstraction)
-    #[inline] fn deque_front(&self) -> Result<&Object, EvalError> { self.deque.front().ok_or(EvalError::MissingArgument) }
-    #[inline] fn deque_back(&self) -> Result<&Object, EvalError> { self.deque.back().ok_or(EvalError::MissingArgument) }
-    #[inline] fn deque_front_mut(&mut self) -> Result<&mut Object, EvalError> { self.deque.front_mut().ok_or(EvalError::MissingArgument) }
-    #[inline] fn deque_back_mut(&mut self) -> Result<&mut Object, EvalError> { self.deque.back_mut().ok_or(EvalError::MissingArgument) }
-    #[inline] fn deque_pop_front(&mut self) -> Result<Object, EvalError> { self.deque.pop_front().ok_or(EvalError::MissingArgument) }
-    #[inline] fn deque_pop_back(&mut self) -> Result<Object, EvalError> { self.deque.pop_back().ok_or(EvalError::MissingArgument) }
+    #[inline] fn deque_front(&self) -> Result<&Object, RuntimeError> { self.deque.front().ok_or(RuntimeError::MissingArgument) }
+    #[inline] fn deque_back(&self) -> Result<&Object, RuntimeError> { self.deque.back().ok_or(RuntimeError::MissingArgument) }
+    #[inline] fn deque_front_mut(&mut self) -> Result<&mut Object, RuntimeError> { self.deque.front_mut().ok_or(RuntimeError::MissingArgument) }
+    #[inline] fn deque_back_mut(&mut self) -> Result<&mut Object, RuntimeError> { self.deque.back_mut().ok_or(RuntimeError::MissingArgument) }
+    #[inline] fn deque_pop_front(&mut self) -> Result<Object, RuntimeError> { self.deque.pop_front().ok_or(RuntimeError::MissingArgument) }
+    #[inline] fn deque_pop_back(&mut self) -> Result<Object, RuntimeError> { self.deque.pop_back().ok_or(RuntimeError::MissingArgument) }
     
-    fn eval_expr(&mut self, expr: &Expr<'src>) -> Result<(), EvalError> {
+    fn eval_expr(&mut self, expr: &Expr<'src>) -> Result<(), RuntimeError> {
         match expr {
             Expr::PushLeft { expr } => match **expr {
                 ////////////////////////////////
@@ -231,14 +232,14 @@ impl<'a, 'src> Eval<'a> {
     }
 
     #[inline]
-    fn eval_body(&mut self, body: &Stmt<'src>) -> Result<(), EvalError> {
+    fn eval_body(&mut self, body: &Stmt<'src>) -> Result<(), RuntimeError> {
         for stmt in body.unwrap_body() {
             self.eval_stmt(stmt)?;
         }
         Ok(())
     }
 
-    fn eval_if_stmt(&mut self, stmt: &Stmt<'src>) -> Result<bool, EvalError> {
+    fn eval_if_stmt(&mut self, stmt: &Stmt<'src>) -> Result<bool, RuntimeError> {
         let (main, conditions, body) = stmt.unwrap_if();
         let mut flag = false;
 
@@ -267,7 +268,7 @@ impl<'a, 'src> Eval<'a> {
         Ok(flag)
     }
 
-    fn eval_ifelse_stmt(&mut self, master: &Stmt<'src>, alternates: &Vec<Stmt<'src>>) -> Result<(), EvalError> {
+    fn eval_ifelse_stmt(&mut self, master: &Stmt<'src>, alternates: &Vec<Stmt<'src>>) -> Result<(), RuntimeError> {
         if !self.eval_if_stmt(master)? {
             for alternate in alternates {
                 match alternate {
@@ -286,7 +287,7 @@ impl<'a, 'src> Eval<'a> {
         Ok(())
     }
 
-    fn eval_while_stmt(&mut self, main: &Expr<'src>, conditions: &Vec<Expr<'src>>, body: &Box<Stmt<'src>>) -> Result<(), EvalError> {
+    fn eval_while_stmt(&mut self, main: &Expr<'src>, conditions: &Vec<Expr<'src>>, body: &Box<Stmt<'src>>) -> Result<(), RuntimeError> {
         loop {
             // run condition
             for condition in conditions {
@@ -304,14 +305,13 @@ impl<'a, 'src> Eval<'a> {
                 }
             }
 
-            // body
             self.eval_body(body)?;
         }
 
         Ok(())
     }
 
-    fn eval_stmt(&mut self, stmt: &Stmt<'src>) -> Result<(), EvalError> {
+    fn eval_stmt(&mut self, stmt: &Stmt<'src>) -> Result<(), RuntimeError> {
         match stmt {
             Stmt::Expr { expr } => self.eval_expr(expr)?,
             Stmt::If { .. } => {

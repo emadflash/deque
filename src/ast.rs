@@ -4,7 +4,7 @@ use std::{fmt, fmt::Display};
 //                          - Expr -
 // --------------------------------------------------------------------------
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) enum Expr<'src> {
+pub enum Expr<'src> {
     Number { num: f32 },
     String { text: &'src str },
     Boolean(bool),
@@ -16,12 +16,12 @@ pub(crate) enum Expr<'src> {
 impl<'src> Display for Expr<'src> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Expr::Number { num } => write!(f, "Expr::Number({})", num),
-            Expr::String { text } => write!(f, "Expr::String({})", text),
-            Expr::Boolean(value) => write!(f, "Expr::Boolean({})", value),
-            Expr::Op { op } => write!(f, "Expr::Op({})", op),
-            Expr::PushLeft { expr } => write!(f, "Expr::PushLeft({})", expr),
-            Expr::PushRight { expr } => write!(f, "Expr::PushLeft({})", expr),
+            Expr::Number { num } => write!(f, "{}", num),
+            Expr::String { text } => write!(f, "\"{}\"", text),
+            Expr::Boolean(value) => write!(f, "{}", value),
+            Expr::Op { op } => write!(f, "{}", op),
+            Expr::PushLeft { expr } => write!(f, "PushLeft( {} )", expr),
+            Expr::PushRight { expr } => write!(f, "PushRight( {} )", expr),
         }
     }
 }
@@ -30,7 +30,7 @@ impl<'src> Display for Expr<'src> {
 //                          - Stmt -
 // --------------------------------------------------------------------------
 #[derive(Debug, PartialEq)]
-pub(crate) enum Stmt<'src> {
+pub enum Stmt<'src> {
     Expr { expr: Expr<'src> },
     Body { body: Vec<Stmt<'src>> },
     If {
@@ -51,21 +51,21 @@ pub(crate) enum Stmt<'src> {
 }
 
 impl<'src> Stmt<'src> {
-    pub(crate) fn unwrap_body(&self) -> &Vec<Stmt<'src>> {
+    pub fn unwrap_body(&self) -> &Vec<Stmt<'src>> {
         match self {
             Stmt::Body { ref body } => body,
             _ => unreachable!("unwraping body requires body!"),
         }
     }
 
-    pub(crate) fn unwrap_if(&self) -> (&Expr<'src>, &Vec<Expr<'src>>, &Box<Stmt<'src>>) {
+    pub fn unwrap_if(&self) -> (&Expr<'src>, &Vec<Expr<'src>>, &Box<Stmt<'src>>) {
         match self {
             Stmt::If { ref main, ref conditions, ref body } => (main, conditions, body),
             _ => unreachable!("should be used for unwraping if-stmt")
         }
     }
 
-    pub(crate) fn unwrap_program(&self) -> &Vec<Stmt<'src>> {
+    pub fn unwrap_program(&self) -> &Vec<Stmt<'src>> {
         match self {
             Stmt::Program { ref stmts } => stmts,
             _ => unreachable!("should be used for unwraping program")
@@ -73,47 +73,70 @@ impl<'src> Stmt<'src> {
     }
 }
 
-impl<'src> Display for Stmt<'src> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Stmt::Expr { expr } => write!(f, "{:?}", expr),
-            Stmt::Body { body } => {
-                writeln!(f, "[")?;
-                for stmt in body {
-                    writeln!(f, "{}", stmt)?;
-                }
-                writeln!(f, "]")
+fn _print_ast<'src>(_stmt: &Stmt<'src>, mut indent: usize) {
+    match _stmt {
+        Stmt::Expr { expr } => println!("{:indent$}{}", "", expr, indent = indent),
+        Stmt::Body { body } => {
+            println!("{:indent$}BLOCK {{", "", indent=indent);
+            indent += 4;
+            for stmt in body {
+                _print_ast(stmt, indent);
             }
-            Stmt::If { main, conditions, body } => {
-                write!(f, "{}", main)?;
-                writeln!(f, "If [")?;
-                for condition in conditions {
-                    writeln!(f, "{}", condition)?;
-                }
-                writeln!(f, "]")?;
-                writeln!(f, "{}", body)
-            }
-            Stmt::IfElse { master, alternates } => {
-                writeln!(f, "{}", master)?;
-                for alternate in alternates {
-                    writeln!(f, "{}", alternate)?;
-                }
-                Ok(())
-            }
-            Stmt::While { main, conditions, body } => {
-                writeln!(f, "{}", main)?;
-                for condition in conditions {
-                    writeln!(f, "{}", condition)?;
-                }
-                writeln!(f, "]")?;
-                writeln!(f, "{}", body)
-            }
-            Stmt::Program { stmts } => {
-                for stmt in stmts {
-                    writeln!(f, "{}", stmt)?;
-                }
-                Ok(())
-            }
+            indent -= 4;
+            println!("{:indent$}}}", "", indent=indent);
         }
-    }
+        Stmt::If { main, conditions, body } => {
+            println!("{:indent$}IF_STMT {}{{", "", main, indent=indent);
+            indent += 4;
+            println!("{:indent$}Conditions {{", "", indent=indent);
+            indent += 4;
+            for condition in conditions {
+                println!("{:indent$}{}", "", condition, indent=indent);
+            }
+            indent -= 4;
+            println!("{:indent$}}}", "", indent=indent);
+            _print_ast(&*body, indent);
+            indent -= 4;
+            println!("{:indent$}}}", "", indent=indent);
+        }
+        Stmt::IfElse { master, alternates } => {
+            println!("{:indent$}IF_ELSE_STMT {{", "", indent=indent);
+            indent += 4;
+            println!("{:indent$}master {{", "", indent=indent);
+            indent += 4;
+            _print_ast(&*master, indent);
+            indent -= 4;
+            println!("{:indent$}}}", "", indent=indent);
+            println!("{:indent$}alternates {{", "", indent=indent);
+            indent += 4;
+            for alternate in alternates {
+                _print_ast(alternate, indent);
+            }
+            indent -= 4;
+            println!("{:indent$}}}", "", indent=indent);
+            indent -= 4;
+            println!("{:indent$}}}", "", indent=indent);
+        }
+        Stmt::While { main, conditions, body } => {
+            println!("WHILE_STMT {} {{", main);
+            indent += 4;
+            println!("{:indent$}Conditions {{", "", indent=indent);
+            indent += 4;
+            for condition in conditions {
+                println!("{:indent$}{}", "", condition, indent=indent);
+            }
+            indent -= 4;
+            println!("{:indent$}}}", "", indent=indent);
+            _print_ast(&*body, indent);
+            indent -= 4;
+            println!("{:indent$}}}", "", indent=indent);
+        }
+
+        _ => (),
+    };
+}
+
+pub fn print_ast<'src>(program: Stmt<'src>) {
+    let stmts = program.unwrap_program();
+    stmts.iter().for_each(|stmt| _print_ast(stmt, 0));
 }

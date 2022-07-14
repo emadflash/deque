@@ -9,3 +9,4 @@ authors = ["madflash backbugkaught@gmail.com"]
 [dependencies]
 anyhow = "1.0.58"
 thiserror = "1.0.31"
+clap = "2.33"

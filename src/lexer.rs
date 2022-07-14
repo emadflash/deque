@@ -1,10 +1,9 @@
 use std::fmt;
 use std::iter::Peekable;
 use std::str::CharIndices;
-use thiserror::Error;
 
-#[derive(Error, Debug, PartialEq, Clone)]
-pub(crate) enum LexerError {
+#[derive(thiserror::Error, Debug, PartialEq, Clone)]
+pub enum LexerError {
     #[error("missing ending quotes")]
     MissingEndOfStringQuote,
     #[error("unknown character error: {ch:?}")]
@@ -15,7 +14,7 @@ pub(crate) enum LexerError {
 //                          - TokenKind -
 // --------------------------------------------------------------------------
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum TokenKind<'src> {
+pub enum TokenKind<'src> {
     Sym { sym: &'src str },
     Iden { iden: &'src str },
     Keyword { kw: &'src str },
@@ -29,9 +28,9 @@ pub(crate) enum TokenKind<'src> {
 //                          - Token -
 // --------------------------------------------------------------------------
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Token<'src> {
-    pub(crate) kind: TokenKind<'src>,
-    pub(crate) pos: (usize, usize),
+pub struct Token<'src> {
+    pub kind: TokenKind<'src>,
+    pub pos: (usize, usize),
 }
 
 impl<'src> Token<'src> {
@@ -64,7 +63,7 @@ impl<'src> fmt::Display for TokenKind<'src> {
 //                          - Lexer -
 // --------------------------------------------------------------------------
 #[derive(Debug)]
-pub(crate) struct Lexer<'src> {
+pub struct Lexer<'src> {
     row: usize,
     col: usize,
     is_finished: bool,
@@ -73,7 +72,7 @@ pub(crate) struct Lexer<'src> {
 }
 
 impl<'src> Lexer<'src> {
-    pub(crate) fn new(src: &'src str) -> Self {
+    pub fn new(src: &'src str) -> Self {
         let chars = src.char_indices().peekable();
         Self {
             row: 0,
@@ -84,7 +83,7 @@ impl<'src> Lexer<'src> {
         }
     }
 
-    pub(crate) fn next_token(&mut self) -> Result<Token<'src>, LexerError> {
+    pub fn next_token(&mut self) -> Result<Token<'src>, LexerError> {
         assert!(!self.is_finished, "Lexer has already finished!");
 
         while let Some((index, ch)) = self.chars.next() {
