@@ -10,3 +10,4 @@ authors = ["madflash backbugkaught@gmail.com"]
 anyhow = "1.0.58"
 thiserror = "1.0.31"
 clap = "2.33"
+ansi_term = "0.12.1"

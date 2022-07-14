@@ -1,4 +1,5 @@
 use std::{fmt, fmt::Display};
+use ansi_term::Color;
 
 // --------------------------------------------------------------------------
 //                          - Expr -
@@ -20,8 +21,8 @@ impl<'src> Display for Expr<'src> {
             Expr::String { text } => write!(f, "\"{}\"", text),
             Expr::Boolean(value) => write!(f, "{}", value),
             Expr::Op { op } => write!(f, "{}", op),
-            Expr::PushLeft { expr } => write!(f, "PushLeft( {} )", expr),
-            Expr::PushRight { expr } => write!(f, "PushRight( {} )", expr),
+            Expr::PushLeft { expr } => write!(f, "PushLeft({})", expr),
+            Expr::PushRight { expr } => write!(f, "PushRight({})", expr),
         }
     }
 }
@@ -74,10 +75,22 @@ impl<'src> Stmt<'src> {
 }
 
 fn _print_ast<'src>(_stmt: &Stmt<'src>, mut indent: usize) {
+    macro_rules! colorize_stmt {
+        ($a:expr) => {
+            Color::Cyan.bold().paint(stringify!($a))
+        }
+    }
+
+    macro_rules! colorize_attr {
+        ($a:expr) => {
+            Color::Green.paint(stringify!($a))
+        }
+    }
+
     match _stmt {
         Stmt::Expr { expr } => println!("{:indent$}{}", "", expr, indent = indent),
         Stmt::Body { body } => {
-            println!("{:indent$}BLOCK {{", "", indent=indent);
+            println!("{:indent$}{} {{", "", colorize_stmt!(BLOCK), indent=indent);
             indent += 4;
             for stmt in body {
                 _print_ast(stmt, indent);
@@ -86,9 +99,9 @@ fn _print_ast<'src>(_stmt: &Stmt<'src>, mut indent: usize) {
             println!("{:indent$}}}", "", indent=indent);
         }
         Stmt::If { main, conditions, body } => {
-            println!("{:indent$}IF_STMT {}{{", "", main, indent=indent);
+            println!("{:indent$}{} {} {{", "", colorize_stmt!(IF_STMT), main, indent=indent);
             indent += 4;
-            println!("{:indent$}Conditions {{", "", indent=indent);
+            println!("{:indent$}{} {{", "", colorize_attr!(Conditions), indent=indent);
             indent += 4;
             for condition in conditions {
                 println!("{:indent$}{}", "", condition, indent=indent);
@@ -100,14 +113,14 @@ fn _print_ast<'src>(_stmt: &Stmt<'src>, mut indent: usize) {
             println!("{:indent$}}}", "", indent=indent);
         }
         Stmt::IfElse { master, alternates } => {
-            println!("{:indent$}IF_ELSE_STMT {{", "", indent=indent);
+            println!("{:indent$}{} {{", "", colorize_stmt!(IF_ELSE_STMT), indent=indent);
             indent += 4;
-            println!("{:indent$}master {{", "", indent=indent);
+            println!("{:indent$}{} {{", "", colorize_attr!(Master), indent=indent);
             indent += 4;
             _print_ast(&*master, indent);
             indent -= 4;
             println!("{:indent$}}}", "", indent=indent);
-            println!("{:indent$}alternates {{", "", indent=indent);
+            println!("{:indent$}{} {{", "", colorize_attr!(Alternates), indent=indent);
             indent += 4;
             for alternate in alternates {
                 _print_ast(alternate, indent);
@@ -118,9 +131,9 @@ fn _print_ast<'src>(_stmt: &Stmt<'src>, mut indent: usize) {
             println!("{:indent$}}}", "", indent=indent);
         }
         Stmt::While { main, conditions, body } => {
-            println!("WHILE_STMT {} {{", main);
+            println!("{:indent$}{} {} {{", "", colorize_stmt!(WHILE_STMT), main);
             indent += 4;
-            println!("{:indent$}Conditions {{", "", indent=indent);
+            println!("{:indent$}{} {{", "", colorize_attr!(Conditions), indent=indent);
             indent += 4;
             for condition in conditions {
                 println!("{:indent$}{}", "", condition, indent=indent);
