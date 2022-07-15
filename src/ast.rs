@@ -92,77 +92,90 @@ fn _print_ast<'src>(_stmt: &Stmt<'src>, mut indent: usize) {
         }
     }
 
+    macro_rules! nest {
+        ($a:block) => {
+            indent += 4;
+            $a;
+            indent -= 4;
+        }
+    }
+
     match _stmt {
         Stmt::Expr { expr } => println!("{:indent$}{}", "", expr, indent = indent),
         Stmt::Block { stmts } => {
             println!("{:indent$}{} {{", "", colorize_stmt!(BLOCK), indent=indent);
-            indent += 4;
-            for stmt in stmts {
-                _print_ast(stmt, indent);
-            }
-            indent -= 4;
+            nest!({
+                for stmt in stmts {
+                    _print_ast(stmt, indent);
+                }
+            });
             println!("{:indent$}}}", "", indent=indent);
         }
         Stmt::If { main, conditions, body } => {
             println!("{:indent$}{} {} {{", "", colorize_stmt!(IF_STMT), main, indent=indent);
-            indent += 4;
-            println!("{:indent$}{} {{", "", colorize_attr!(Conditions), indent=indent);
-            indent += 4;
-            for condition in conditions {
-                println!("{:indent$}{}", "", condition, indent=indent);
-            }
-            indent -= 4;
-            println!("{:indent$}}}", "", indent=indent);
-            _print_ast(&*body, indent);
-            indent -= 4;
+            nest!({
+                println!("{:indent$}{} {{", "", colorize_attr!(Conditions), indent=indent);
+                nest!({
+                    for condition in conditions {
+                        println!("{:indent$}{}", "", condition, indent=indent);
+                    }
+                });
+                println!("{:indent$}}}", "", indent=indent);
+                _print_ast(&*body, indent);
+            });
             println!("{:indent$}}}", "", indent=indent);
         }
         Stmt::IfElse { master, alternates } => {
             println!("{:indent$}{} {{", "", colorize_stmt!(IF_ELSE_STMT), indent=indent);
-            indent += 4;
-            println!("{:indent$}{} {{", "", colorize_attr!(Master), indent=indent);
-            indent += 4;
-            _print_ast(&*master, indent);
-            indent -= 4;
-            println!("{:indent$}}}", "", indent=indent);
-            println!("{:indent$}{} {{", "", colorize_attr!(Alternates), indent=indent);
-            indent += 4;
-            for alternate in alternates {
-                _print_ast(alternate, indent);
-            }
-            indent -= 4;
-            println!("{:indent$}}}", "", indent=indent);
-            indent -= 4;
+            nest!({
+                println!("{:indent$}{} {{", "", colorize_attr!(Master), indent=indent);
+
+                nest!({
+                    _print_ast(&*master, indent);
+                });
+
+                println!("{:indent$}}}", "", indent=indent);
+                println!("{:indent$}{} {{", "", colorize_attr!(Alternates), indent=indent);
+
+                nest!({
+                    for alternate in alternates {
+                        _print_ast(alternate, indent);
+                    }
+                });
+
+                println!("{:indent$}}}", "", indent=indent);
+            });
+
             println!("{:indent$}}}", "", indent=indent);
         }
         Stmt::While { main, conditions, body } => {
             println!("{:indent$}{} {} {{", "", colorize_stmt!(WHILE_STMT), main);
-            indent += 4;
-            println!("{:indent$}{} {{", "", colorize_attr!(Conditions), indent=indent);
-            indent += 4;
-            for condition in conditions {
-                println!("{:indent$}{}", "", condition, indent=indent);
-            }
-            indent -= 4;
-            println!("{:indent$}}}", "", indent=indent);
-            _print_ast(&*body, indent);
-            indent -= 4;
+            nest!({
+                println!("{:indent$}{} {{", "", colorize_attr!(Conditions), indent=indent);
+                nest!({
+                    for condition in conditions {
+                        println!("{:indent$}{}", "", condition, indent=indent);
+                    }
+                });
+                println!("{:indent$}}}", "", indent=indent);
+                _print_ast(&*body, indent);
+            });
             println!("{:indent$}}}", "", indent=indent);
         }
         Stmt::Let { main, token, iden } => {
             println!("{:indent$}{} {} {{", "", colorize_stmt!(LET_STMT), main);
-            indent += 4;
-            println!("{:indent$}{}: {}", "", colorize_attr!(Token), token, indent=indent);
-            println!("{:indent$}{}: {}", "", colorize_attr!(Identifier), iden, indent=indent);
-            indent -= 4;
+            nest!({
+                println!("{:indent$}{}: {}", "", colorize_attr!(Token), token, indent=indent);
+                println!("{:indent$}{}: {}", "", colorize_attr!(Identifier), iden, indent=indent);
+            });
             println!("{:indent$}}}", "", indent=indent);
         }
         Stmt::Fn { main: _, name, args, body } => {
             println!("{:indent$}{} {} {{", "", colorize_stmt!(FUNC_DECL), name);
-            indent += 4;
-            println!("{:indent$}{}: {:?}", "", colorize_attr!(Args), args, indent=indent);
-            _print_ast(&*body, indent);
-            indent -= 4;
+            nest!({
+                println!("{:indent$}{}: {:?}", "", colorize_attr!(Args), args, indent=indent);
+                _print_ast(&*body, indent);
+            });
             println!("{:indent$}}}", "", indent=indent);
         }
 
