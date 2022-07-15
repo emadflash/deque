@@ -89,6 +89,10 @@ impl<'src> Parser<'src> {
                         expr: Box::new(Expr::Boolean(value)),
                     }),
 
+                    TokenKind::Iden { iden } => Ok(Expr::PushLeft {
+                        expr: Box::new(Expr::Iden { iden })
+                    }),
+
                     TokenKind::Keyword { kw } => match &kw {
                         &"dup" | &"drop" | &"let" | &"print" | &"println" | &"if" | &"while" | &"eq" | &"inc" | &"dec" => {
                             Ok(Expr::PushLeft {
@@ -153,6 +157,12 @@ impl<'src> Parser<'src> {
                 })
             },
 
+            TokenKind::Iden { iden } => {
+                self.expect(TokenKind::Sym { sym: "!" })?;
+                Ok(Expr::PushLeft {
+                    expr: Box::new(Expr::Iden { iden })
+                })
+            }
             _ => unreachable!("{:?}", tok),
         };
 
@@ -162,19 +172,19 @@ impl<'src> Parser<'src> {
     // --------------------------------------------------------------------------
     //                          - Body/Block -
     // --------------------------------------------------------------------------
-    fn parse_body(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
+    fn parse_block(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
         self.expect(TokenKind::Sym { sym: "{" })?;
-        let mut body: Vec<Stmt<'src>> = Vec::new();
+        let mut stmts: Vec<Stmt<'src>> = Vec::new();
 
         while let Some(tok) = self.lexer.peek() {
             if matches!(tok.as_ref()?.kind, TokenKind::Sym { sym: "}" }) {
                 break;
             }
-            body.push(self.parse_stmt()?);
+            stmts.push(self.parse_stmt()?);
         }
 
         self.expect(TokenKind::Sym { sym: "}" })?;
-        Ok(Stmt::Body { body })
+        Ok(Stmt::Block { stmts })
     }
 
     // --------------------------------------------------------------------------
@@ -194,7 +204,7 @@ impl<'src> Parser<'src> {
             panic!("expected conditions in if stmt");
         }
 
-        Ok(Stmt::If { main, conditions, body: Box::new(self.parse_body()?) })
+        Ok(Stmt::If { main, conditions, body: Box::new(self.parse_block()?) })
     }
 
     fn parse_if_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
@@ -208,7 +218,7 @@ impl<'src> Parser<'src> {
 
         if self.match_next_token(TokenKind::Keyword { kw: "else" }) {
             self.lexer.next();
-            alternates.push(self.parse_body()?);
+            alternates.push(self.parse_block()?);
         }
 
         if alternates.is_empty() {
@@ -230,8 +240,24 @@ impl<'src> Parser<'src> {
         Ok(Stmt::While {
             main,
             conditions,
-            body: Box::new(self.parse_body()?),
+            body: Box::new(self.parse_block()?),
         })
+    }
+
+    fn parse_let_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
+        if let Some(tok) = self.lexer.next() {
+            let tok = tok?;
+            match tok.kind {
+                TokenKind::Iden { iden } => return Ok(Stmt::Let {
+                    main,
+                    token: tok.clone(),
+                    iden
+                }),
+                _ => panic!("expected a identifier"),
+            }
+        }
+
+        panic!()
     }
 
     fn parse_stmt(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
@@ -242,6 +268,7 @@ impl<'src> Parser<'src> {
                 match **expr {
                     Expr::Op { op: "if" } => return self.parse_if_stmt(stmt),
                     Expr::Op { op: "while" } => return self.parse_while_stmt(stmt),
+                    Expr::Op { op: "let" } => return self.parse_let_stmt(stmt),
                     _ => (),
                 };
             }
@@ -338,8 +365,8 @@ mod tests {
                              expr: Box::new(Expr::Number { num: 1.0 })
                          }
                     ],
-                    body: Box::new(Stmt::Body {
-                        body: vec![
+                    body: Box::new(Stmt::Block {
+                        stmts: vec![
                             Stmt::Expr {
                                 expr: Expr::PushLeft {
                                     expr: Box::new(Expr::Number { num: 1.0 })
@@ -379,8 +406,8 @@ mod tests {
                                 expr: Box::new(Expr::Number { num: 1.0}),
                             },
                         ],
-                        body: Box::new(Stmt::Body {
-                            body: vec![]
+                        body: Box::new(Stmt::Block {
+                            stmts: vec![]
                         })
                     }),
                     alternates: vec![
@@ -396,7 +423,7 @@ mod tests {
                                     expr: Box::new(Expr::Op { op: ">" }),
                                 },
                             ],
-                            body: Box::new(Stmt::Body { body: vec![] })
+                            body: Box::new(Stmt::Block { stmts: vec![] })
                         },
                         Stmt::If {
                             main: Expr::PushLeft {
@@ -405,8 +432,8 @@ mod tests {
                             conditions: vec![Expr::PushRight {
                                 expr: Box::new(Expr::Op { op: "dup" }),
                             },],
-                            body: Box::new(Stmt::Body {
-                                body: vec![
+                            body: Box::new(Stmt::Block {
+                                stmts: vec![
                                     Stmt::Expr {
                                         expr: Expr::PushRight {
                                             expr: Box::new(Expr::Number { num: 69.0 })
@@ -445,8 +472,8 @@ mod tests {
                                 expr: Box::new(Expr::Number { num: 1.0 })
                             }
                         ],
-                        body: Box::new(Stmt::Body {
-                            body: vec![
+                        body: Box::new(Stmt::Block {
+                            stmts: vec![
                                 Stmt::Expr {
                                     expr: Expr::PushLeft {
                                         expr: Box::new(Expr::Number { num: 2.0 })
@@ -456,8 +483,8 @@ mod tests {
                         })
                     }),
                     alternates: vec![
-                        Stmt::Body {
-                            body: vec![
+                        Stmt::Block {
+                            stmts: vec![
                                 Stmt::Expr {
                                     expr: Expr::PushRight {
                                         expr: Box::new(Expr::Number { num: 2.0 })
@@ -497,8 +524,8 @@ mod tests {
                 conditions: vec![Expr::PushLeft {
                     expr: Box::new(Expr::Op { op: "dup" }),
                 },],
-                body: Box::new(Stmt::Body {
-                    body: vec![Stmt::Expr {
+                body: Box::new(Stmt::Block {
+                    stmts: vec![Stmt::Expr {
                         expr: Expr::PushLeft {
                             expr: Box::new(Expr::Number { num: 1.0 }),
                         },

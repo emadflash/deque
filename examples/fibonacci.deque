@@ -1,0 +1,19 @@
+-- prints first 10 "fibonacci" numbers
+
+!0 !let a
+!1 !let b
+
+!a !println
+!b !println
+
+!0
+
+!while !dup !10 !> {
+    !a !b !+ !let c
+    !c !println
+    
+    !b !let a
+    !c !let b
+
+    !inc
+}

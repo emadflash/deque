@@ -1,0 +1,27 @@
+-- print first 10 "prime" numbers
+
+!0
+
+!while !dup !10 !> {
+    !dup !let a
+    !0 !let count
+
+    !2
+    !while !dup !a !> {
+        !dup !let curr  -- save current
+
+        !a !curr !%     -- TODO: Make a method to swap two objects on stack
+        !if !0 !eq {
+            !1 !a !+ !let count -- increment count
+        }
+
+        !inc
+    }
+    !drop
+
+    !if !count !0 !eq {
+        !a !println
+    }
+
+    !inc
+}

@@ -1,4 +1,5 @@
 use std::{fmt, fmt::Display};
+use crate::lexer::Token;
 use ansi_term::Color;
 
 // --------------------------------------------------------------------------
@@ -9,6 +10,7 @@ pub enum Expr<'src> {
     Number { num: f32 },
     String { text: &'src str },
     Boolean(bool),
+    Iden { iden: &'src str },
     Op { op: &'src str },
     PushLeft { expr: Box<Expr<'src>> },
     PushRight { expr: Box<Expr<'src>> },
@@ -20,6 +22,7 @@ impl<'src> Display for Expr<'src> {
             Expr::Number { num } => write!(f, "{}", num),
             Expr::String { text } => write!(f, "\"{}\"", text),
             Expr::Boolean(value) => write!(f, "{}", value),
+            Expr::Iden { iden } => write!(f, "{}", iden),
             Expr::Op { op } => write!(f, "{}", op),
             Expr::PushLeft { expr } => write!(f, "PushLeft({})", expr),
             Expr::PushRight { expr } => write!(f, "PushRight({})", expr),
@@ -32,8 +35,9 @@ impl<'src> Display for Expr<'src> {
 // --------------------------------------------------------------------------
 #[derive(Debug, PartialEq)]
 pub enum Stmt<'src> {
+    Program { stmts: Vec<Stmt<'src>> },
     Expr { expr: Expr<'src> },
-    Body { body: Vec<Stmt<'src>> },
+    Block { stmts: Vec<Stmt<'src>> },
     If {
         main: Expr<'src>,
         conditions: Vec<Expr<'src>>,
@@ -48,13 +52,13 @@ pub enum Stmt<'src> {
         conditions: Vec<Expr<'src>>,
         body: Box<Stmt<'src>>,
     },
-    Program { stmts: Vec<Stmt<'src>> }
+    Let { main: Expr<'src>, token: Token<'src>, iden: &'src str }
 }
 
 impl<'src> Stmt<'src> {
     pub fn unwrap_body(&self) -> &Vec<Stmt<'src>> {
         match self {
-            Stmt::Body { ref body } => body,
+            Stmt::Block { ref stmts } => stmts,
             _ => unreachable!("unwraping body requires body!"),
         }
     }
@@ -89,10 +93,10 @@ fn _print_ast<'src>(_stmt: &Stmt<'src>, mut indent: usize) {
 
     match _stmt {
         Stmt::Expr { expr } => println!("{:indent$}{}", "", expr, indent = indent),
-        Stmt::Body { body } => {
+        Stmt::Block { stmts } => {
             println!("{:indent$}{} {{", "", colorize_stmt!(BLOCK), indent=indent);
             indent += 4;
-            for stmt in body {
+            for stmt in stmts {
                 _print_ast(stmt, indent);
             }
             indent -= 4;
@@ -141,6 +145,14 @@ fn _print_ast<'src>(_stmt: &Stmt<'src>, mut indent: usize) {
             indent -= 4;
             println!("{:indent$}}}", "", indent=indent);
             _print_ast(&*body, indent);
+            indent -= 4;
+            println!("{:indent$}}}", "", indent=indent);
+        }
+        Stmt::Let { main, token, iden } => {
+            println!("{:indent$}{} {} {{", "", colorize_stmt!(LET_STMT), main);
+            indent += 4;
+            println!("{:indent$}{}: {}", "", colorize_attr!(Token), token, indent=indent);
+            println!("{:indent$}{}: {}", "", colorize_attr!(Identifier), iden, indent=indent);
             indent -= 4;
             println!("{:indent$}}}", "", indent=indent);
         }

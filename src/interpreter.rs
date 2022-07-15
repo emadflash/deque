@@ -1,7 +1,8 @@
 use std::collections::VecDeque;
 
-use crate::env::Env;
+use crate::env::Envirnoment;
 use crate::error::Error;
+use crate::lexer::Token;
 use crate::object::{object, Object};
 use crate::parser::Parser;
 use crate::ast::{Expr, Stmt};
@@ -13,18 +14,21 @@ use crate::ast::{Expr, Stmt};
 pub enum RuntimeError {
     #[error("missing argument on deque")]
     MissingArgument,
+
+    #[error("undefined variable")]
+    UndefinedVariable,
 }
 
 // --------------------------------------------------------------------------
 //                          - Interpreter -
 // --------------------------------------------------------------------------
 pub struct Interpreter<'a> {
-    env: &'a mut Env,
+    env: &'a mut Envirnoment,
     deque: VecDeque<Object>,
 }
 
 impl<'a, 'src> Interpreter<'a> {
-    pub fn new(env: &'a mut Env) -> Self {
+    pub fn new(env: &'a mut Envirnoment) -> Self {
         Self { 
             env,
             deque: VecDeque::new(),
@@ -48,6 +52,13 @@ impl<'a, 'src> Interpreter<'a> {
                 Expr::Number { num } => self.deque.push_front(object::number!(num)),
                 Expr::String { text } => self.deque.push_front(object::string!(text.to_string())),
                 Expr::Boolean(value) => self.deque.push_front(object::boolean!(value)),
+                Expr::Iden { iden } => {
+                    if let Some(value) = self.env.get(iden.to_string()) {
+                        self.deque.push_front(value);
+                    } else {
+                        return Err(RuntimeError::UndefinedVariable);
+                    }
+                },
 
                 ////////////////////////////////
                 // ~ Ops/Builtins
@@ -232,7 +243,7 @@ impl<'a, 'src> Interpreter<'a> {
     }
 
     #[inline]
-    fn visit_body(&mut self, body: &Stmt<'src>) -> Result<(), RuntimeError> {
+    fn visit_block(&mut self, body: &Stmt<'src>) -> Result<(), RuntimeError> {
         for stmt in body.unwrap_body() {
             self.visit_stmt(stmt)?;
         }
@@ -262,7 +273,7 @@ impl<'a, 'src> Interpreter<'a> {
         }
 
         if flag {
-            self.visit_body(body)?;
+            self.visit_block(body)?;
         }
 
         Ok(flag)
@@ -279,7 +290,7 @@ impl<'a, 'src> Interpreter<'a> {
                         }
                     }
                     // else arm
-                    Stmt::Body { .. } => self.visit_body(alternate)?,
+                    Stmt::Block { .. } => self.visit_block(alternate)?,
                     _ => unreachable!()
                 };
             }
@@ -289,7 +300,7 @@ impl<'a, 'src> Interpreter<'a> {
 
     fn visit_while_stmt(&mut self, main: &Expr<'src>, conditions: &Vec<Expr<'src>>, body: &Box<Stmt<'src>>) -> Result<(), RuntimeError> {
         loop {
-            // run condition
+            // interpret condition
             for condition in conditions {
                 self.eval_expr(condition)?;
             }
@@ -305,9 +316,22 @@ impl<'a, 'src> Interpreter<'a> {
                 }
             }
 
-            self.visit_body(body)?;
+            self.visit_block(body)?;
         }
 
+        Ok(())
+    }
+
+    fn visit_let_stmt(&mut self, main: &Expr<'src>, iden: &'src str) -> Result<(), RuntimeError> {
+        let value;
+
+        if matches!(main, Expr::PushLeft { .. }) {
+            value = self.deque_pop_front()?;
+        } else {
+            value = self.deque_pop_back()?;
+        }
+
+        self.env.define(iden.to_string(), value);
         Ok(())
     }
 
@@ -319,13 +343,14 @@ impl<'a, 'src> Interpreter<'a> {
             }
             Stmt::IfElse { master, alternates } => self.visit_ifelse_stmt(master, alternates)?,
             Stmt::While { main, conditions, body } => self.visit_while_stmt(main, conditions, body)?,
-            _ => (),
+            Stmt::Let { main, iden, .. } => self.visit_let_stmt(main, iden)?,
+            _ => unreachable!()
         }
 
         Ok(())
     }
 
-    pub fn run(&mut self, src: &'src str) -> anyhow::Result<()> {
+    pub fn interpret(&mut self, src: &'src str) -> anyhow::Result<()> {
         let mut parser = Parser::new(src).unwrap();
         parser
             .parse().unwrap()
@@ -341,32 +366,32 @@ mod tests {
 
     #[test]
     fn interpret_arithmetic_exprs() {
-        let mut env = Env::new();
+        let mut env = Envirnoment::new();
         let mut interpreter = Interpreter::new(&mut env);
-        assert!(interpreter.run("!1 !2 !+ !dup !print").is_ok());
+        assert!(interpreter.interpret("!1 !2 !+ !dup !print").is_ok());
         assert_eq!(interpreter.deque, VecDeque::from([object::number!(3.0)]));
     }
 
     #[test]
     fn interpret_if_statements() {
         {
-            let mut env = Env::new();
+            let mut env = Envirnoment::new();
             let mut interpreter = Interpreter::new(&mut env);
-            assert!(interpreter.run("!if !true { !1 !2 !+ }").is_ok());
+            assert!(interpreter.interpret("!if !true { !1 !2 !+ }").is_ok());
             assert_eq!(interpreter.deque, VecDeque::from([object::number!(3.0)]));
         }
 
         {
-            let mut env = Env::new();
+            let mut env = Envirnoment::new();
             let mut interpreter = Interpreter::new(&mut env);
-            assert!(interpreter.run("!0 !if !1 !eq { !1 !2 !+ } else { !2 !1 !- }").is_ok());
+            assert!(interpreter.interpret("!0 !if !1 !eq { !1 !2 !+ } else { !2 !1 !- }").is_ok());
             assert_eq!(interpreter.deque, VecDeque::from([object::number!(1.0)]));
         }
 
         {
-            let mut env = Env::new();
+            let mut env = Envirnoment::new();
             let mut interpreter = Interpreter::new(&mut env);
-            assert!(interpreter.run("
+            assert!(interpreter.interpret("
                 !0
                 !if !dup !1 !eq {
                     !1 !2 !+
@@ -383,9 +408,9 @@ mod tests {
     #[test]
     fn interpret_while_loop() {
         // Series from 0 to 10 (including 10)
-        let mut env = Env::new();
+        let mut env = Envirnoment::new();
         let mut interpreter = Interpreter::new(&mut env);
-        assert!(interpreter.run(
+        assert!(interpreter.interpret(
                 "
                 !1
                 !while !dup !10 !> {
