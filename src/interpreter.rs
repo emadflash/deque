@@ -16,14 +16,14 @@ pub enum RuntimeError {
 }
 
 // --------------------------------------------------------------------------
-//                          - Eval -
+//                          - Interpreter -
 // --------------------------------------------------------------------------
-pub struct Eval<'a> {
+pub struct Interpreter<'a> {
     env: &'a mut Env,
     deque: VecDeque<Object>,
 }
 
-impl<'a, 'src> Eval<'a> {
+impl<'a, 'src> Interpreter<'a> {
     pub fn new(env: &'a mut Env) -> Self {
         Self { 
             env,
@@ -232,14 +232,14 @@ impl<'a, 'src> Eval<'a> {
     }
 
     #[inline]
-    fn eval_body(&mut self, body: &Stmt<'src>) -> Result<(), RuntimeError> {
+    fn visit_body(&mut self, body: &Stmt<'src>) -> Result<(), RuntimeError> {
         for stmt in body.unwrap_body() {
-            self.eval_stmt(stmt)?;
+            self.visit_stmt(stmt)?;
         }
         Ok(())
     }
 
-    fn eval_if_stmt(&mut self, stmt: &Stmt<'src>) -> Result<bool, RuntimeError> {
+    fn visit_if_stmt(&mut self, stmt: &Stmt<'src>) -> Result<bool, RuntimeError> {
         let (main, conditions, body) = stmt.unwrap_if();
         let mut flag = false;
 
@@ -262,24 +262,24 @@ impl<'a, 'src> Eval<'a> {
         }
 
         if flag {
-            self.eval_body(body)?;
+            self.visit_body(body)?;
         }
 
         Ok(flag)
     }
 
-    fn eval_ifelse_stmt(&mut self, master: &Stmt<'src>, alternates: &Vec<Stmt<'src>>) -> Result<(), RuntimeError> {
-        if !self.eval_if_stmt(master)? {
+    fn visit_ifelse_stmt(&mut self, master: &Stmt<'src>, alternates: &Vec<Stmt<'src>>) -> Result<(), RuntimeError> {
+        if !self.visit_if_stmt(master)? {
             for alternate in alternates {
                 match alternate {
                     // elif arms
                     Stmt::If { .. } => {
-                        if self.eval_if_stmt(alternate)? {
+                        if self.visit_if_stmt(alternate)? {
                             break;
                         }
                     }
                     // else arm
-                    Stmt::Body { .. } => self.eval_body(alternate)?,
+                    Stmt::Body { .. } => self.visit_body(alternate)?,
                     _ => unreachable!()
                 };
             }
@@ -287,7 +287,7 @@ impl<'a, 'src> Eval<'a> {
         Ok(())
     }
 
-    fn eval_while_stmt(&mut self, main: &Expr<'src>, conditions: &Vec<Expr<'src>>, body: &Box<Stmt<'src>>) -> Result<(), RuntimeError> {
+    fn visit_while_stmt(&mut self, main: &Expr<'src>, conditions: &Vec<Expr<'src>>, body: &Box<Stmt<'src>>) -> Result<(), RuntimeError> {
         loop {
             // run condition
             for condition in conditions {
@@ -305,32 +305,32 @@ impl<'a, 'src> Eval<'a> {
                 }
             }
 
-            self.eval_body(body)?;
+            self.visit_body(body)?;
         }
 
         Ok(())
     }
 
-    fn eval_stmt(&mut self, stmt: &Stmt<'src>) -> Result<(), RuntimeError> {
+    fn visit_stmt(&mut self, stmt: &Stmt<'src>) -> Result<(), RuntimeError> {
         match stmt {
             Stmt::Expr { expr } => self.eval_expr(expr)?,
             Stmt::If { .. } => {
-                let _ = self.eval_if_stmt(stmt)?;
+                let _ = self.visit_if_stmt(stmt)?;
             }
-            Stmt::IfElse { master, alternates } => self.eval_ifelse_stmt(master, alternates)?,
-            Stmt::While { main, conditions, body } => self.eval_while_stmt(main, conditions, body)?,
+            Stmt::IfElse { master, alternates } => self.visit_ifelse_stmt(master, alternates)?,
+            Stmt::While { main, conditions, body } => self.visit_while_stmt(main, conditions, body)?,
             _ => (),
         }
 
         Ok(())
     }
 
-    pub fn eval(&mut self, src: &'src str) -> anyhow::Result<()> {
+    pub fn run(&mut self, src: &'src str) -> anyhow::Result<()> {
         let mut parser = Parser::new(src).unwrap();
         parser
             .parse().unwrap()
             .unwrap_program()
-            .iter().map(|stmt| self.eval_stmt(stmt)).collect::<Result<Vec<_>, _>>()?;
+            .iter().map(|stmt| self.visit_stmt(stmt)).collect::<Result<Vec<_>, _>>()?;
         Ok(())
     }
 }
@@ -340,33 +340,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn evaluate_arithmetic_exprs() {
+    fn interpret_arithmetic_exprs() {
         let mut env = Env::new();
-        let mut eval = Eval::new(&mut env);
-        assert!(eval.eval("!1 !2 !+ !dup !print").is_ok());
-        assert_eq!(eval.deque, VecDeque::from([object::number!(3.0)]));
+        let mut interpreter = Interpreter::new(&mut env);
+        assert!(interpreter.run("!1 !2 !+ !dup !print").is_ok());
+        assert_eq!(interpreter.deque, VecDeque::from([object::number!(3.0)]));
     }
 
     #[test]
-    fn evaluate_if_statements() {
+    fn interpret_if_statements() {
         {
             let mut env = Env::new();
-            let mut eval = Eval::new(&mut env);
-            assert!(eval.eval("!if !true { !1 !2 !+ }").is_ok());
-            assert_eq!(eval.deque, VecDeque::from([object::number!(3.0)]));
+            let mut interpreter = Interpreter::new(&mut env);
+            assert!(interpreter.run("!if !true { !1 !2 !+ }").is_ok());
+            assert_eq!(interpreter.deque, VecDeque::from([object::number!(3.0)]));
         }
 
         {
             let mut env = Env::new();
-            let mut eval = Eval::new(&mut env);
-            assert!(eval.eval("!0 !if !1 !eq { !1 !2 !+ } else { !2 !1 !- }").is_ok());
-            assert_eq!(eval.deque, VecDeque::from([object::number!(1.0)]));
+            let mut interpreter = Interpreter::new(&mut env);
+            assert!(interpreter.run("!0 !if !1 !eq { !1 !2 !+ } else { !2 !1 !- }").is_ok());
+            assert_eq!(interpreter.deque, VecDeque::from([object::number!(1.0)]));
         }
 
         {
             let mut env = Env::new();
-            let mut eval = Eval::new(&mut env);
-            assert!(eval.eval("
+            let mut interpreter = Interpreter::new(&mut env);
+            assert!(interpreter.run("
                 !0
                 !if !dup !1 !eq {
                     !1 !2 !+
@@ -376,16 +376,16 @@ mod tests {
                     !2 !1 !-
                 }
             ").is_ok());
-            assert_eq!(eval.deque, VecDeque::from([object::number!(99.0)]));
+            assert_eq!(interpreter.deque, VecDeque::from([object::number!(99.0)]));
         }
     }
 
     #[test]
-    fn evaluate_while_loop() {
+    fn interpret_while_loop() {
         // Series from 0 to 10 (including 10)
         let mut env = Env::new();
-        let mut eval = Eval::new(&mut env);
-        assert!(eval.eval(
+        let mut interpreter = Interpreter::new(&mut env);
+        assert!(interpreter.run(
                 "
                 !1
                 !while !dup !10 !> {
@@ -395,7 +395,7 @@ mod tests {
             )
             .is_ok());
         assert_eq!(
-            eval.deque,
+            interpreter.deque,
             VecDeque::from([
                 object::number!(10.0), object::number!(9.0), object::number!(8.0), object::number!(7.0), object::number!(6.0), object::number!(5.0),
                 object::number!(4.0), object::number!(3.0), object::number!(2.0), object::number!(1.0)])

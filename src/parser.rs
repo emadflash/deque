@@ -90,7 +90,7 @@ impl<'src> Parser<'src> {
                     }),
 
                     TokenKind::Keyword { kw } => match &kw {
-                        &"dup" | &"drop" | &"print" | &"println" | &"if" | &"while" | &"eq" | &"inc" | &"dec" => {
+                        &"dup" | &"drop" | &"let" | &"print" | &"println" | &"if" | &"while" | &"eq" | &"inc" | &"dec" => {
                             Ok(Expr::PushLeft {
                                 expr: Box::new(Expr::Op { op: kw }),
                             })
@@ -112,7 +112,7 @@ impl<'src> Parser<'src> {
             },
 
             TokenKind::Keyword { kw } => match &kw {
-                &"dup" | &"drop" | &"print" | &"println" | &"if" | &"while" | &"eq" | &"inc" | &"dec" => {
+                &"dup" | &"drop" | &"let" | &"print" | &"println" | &"if" | &"while" | &"eq" | &"inc" | &"dec" => {
                     self.expect(TokenKind::Sym { sym: "!" })?;
                     Ok(Expr::PushRight {
                         expr: Box::new(Expr::Op { op: kw }),
@@ -198,7 +198,6 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_if_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
-        // NOTE(madflash) - master is the first if-stmt, and elif/else are alternates
         let master = self.parse_if_block(main.clone())?;
         let mut alternates: Vec<Stmt<'src>> = Vec::new();
 
@@ -207,7 +206,7 @@ impl<'src> Parser<'src> {
             alternates.push(self.parse_if_block(main.clone())?);
         }
 
-        while self.match_next_token(TokenKind::Keyword { kw: "else" }) {
+        if self.match_next_token(TokenKind::Keyword { kw: "else" }) {
             self.lexer.next();
             alternates.push(self.parse_body()?);
         }

@@ -1,7 +1,7 @@
 use std::{error::Error, fs};
 
 use deque::env::Env;
-use deque::eval::Eval;
+use deque::interpreter::Interpreter;
 use deque::parser::Parser;
 use deque::lexer::print_lexical_analysis;
 use deque::ast::print_ast;
@@ -55,8 +55,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         print_lexical_analysis(&source_files[0]);
     } else {
         let mut env = Env::new();
-        let mut eval = Eval::new(&mut env);
-        eval.eval(&source_files[0])?;
+        let mut interpreter = Interpreter::new(&mut env);
+        interpreter.run(&source_files[0])?;
     }
 
     Ok(())

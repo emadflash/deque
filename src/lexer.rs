@@ -231,7 +231,7 @@ impl<'src> Lexer<'src> {
 
                     let text = &self.src[index..=end];
                     let tok = match text {
-                        "dup" | "drop" | "print" | "println" | "if" | "elif" | "else" | "while"
+                        "dup" | "drop" | "let" | "print" | "println" | "if" | "elif" | "else" | "while"
                         | "eq" | "inc" | "dec" => TokenKind::Keyword { kw: text }.to_token((self.row, self.col)),
 
                         "true" => TokenKind::Boolean(true).to_token((self.row, self.col)),

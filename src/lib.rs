@@ -1,4 +1,4 @@
-pub mod eval;
+pub mod interpreter;
 pub mod env;
 pub mod object;
 pub mod error;

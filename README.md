@@ -10,3 +10,4 @@ Deque based programming language
 - [ ] structs
 - [ ] c like macros
 - [ ] modules
+- [ ] vim syntax highlighting
