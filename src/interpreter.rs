@@ -343,6 +343,10 @@ impl<'src> Interpreter {
         Ok(())
     }
 
+    fn visit_fn_decl_stmt(&mut self) -> Result<(), RuntimeError> {
+        Ok(())
+    }
+
     fn visit_stmt(&mut self, stmt: &Stmt<'src>) -> Result<(), RuntimeError> {
         match stmt {
             Stmt::Expr { expr } => self.eval_expr(expr)?,
@@ -353,6 +357,7 @@ impl<'src> Interpreter {
             Stmt::IfElse { master, alternates } => self.visit_ifelse_stmt(master, alternates)?,
             Stmt::While { main, conditions, body } => self.visit_while_stmt(main, conditions, body)?,
             Stmt::Let { main, iden, .. } => self.visit_let_stmt(main, iden)?,
+            Stmt::Fn { main, name, args, body } => self.visit_fn_decl_stmt()?,
             _ => unreachable!()
         }
 

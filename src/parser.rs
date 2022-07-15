@@ -94,7 +94,7 @@ impl<'src> Parser<'src> {
                     }),
 
                     TokenKind::Keyword { kw } => match &kw {
-                        &"dup" | &"drop" | &"let" | &"print" | &"println" | &"if" | &"while" | &"eq" | &"inc" | &"dec" => {
+                        &"dup" | &"drop" | &"let" | &"return" | &"print" | &"println" | &"if" | &"while" | &"eq" | &"inc" | &"dec" => {
                             Ok(Expr::PushLeft {
                                 expr: Box::new(Expr::Op { op: kw }),
                             })
@@ -116,7 +116,7 @@ impl<'src> Parser<'src> {
             },
 
             TokenKind::Keyword { kw } => match &kw {
-                &"dup" | &"drop" | &"let" | &"print" | &"println" | &"if" | &"while" | &"eq" | &"inc" | &"dec" => {
+                &"dup" | &"drop" | &"let" | &"return" | &"print" | &"println" | &"if" | &"while" | &"eq" | &"inc" | &"dec" => {
                     self.expect(TokenKind::Sym { sym: "!" })?;
                     Ok(Expr::PushRight {
                         expr: Box::new(Expr::Op { op: kw }),
@@ -260,26 +260,80 @@ impl<'src> Parser<'src> {
         panic!()
     }
 
+    fn parse_fn_args(&mut self) -> anyhow::Result<Vec<&'src str>, ParseError<'src>> {
+        self.expect(TokenKind::Sym { sym: "(" })?;
+        let mut args: Vec<&'src str> = Vec::new();
+
+        if self.match_next_token(TokenKind::Sym { sym: ")" }) {
+            return Ok(args);
+        }
+
+        let tok = self.lexer.next().unwrap();
+        match tok?.kind {
+            TokenKind::Iden { iden } => args.push(iden),
+            _ => panic!("expected an identifier: {:?}", args),
+        }
+
+        while let Some(tok) = self.lexer.peek() {
+            if matches!(tok.as_ref()?.kind, TokenKind::Sym { sym: ")" }) {
+                break;
+            } else if matches!(tok.as_ref()?.kind, TokenKind::Sym { sym: "," }) {
+                self.lexer.next();
+            }
+
+            let __tok = self.lexer.next().unwrap();
+            match __tok?.kind {
+                TokenKind::Iden { iden } => {
+                    args.push(iden);
+                },
+                _ => panic!("expected an identifier"),
+            }
+        }
+
+        self.expect(TokenKind::Sym { sym: ")" })?;
+        Ok(args)
+    }
+
+    fn parse_fn_decl(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
+        self.expect(TokenKind::Keyword { kw: "fn" })?;
+        if let Some(tok) = self.lexer.next() {
+            let tok = tok?;
+            match tok.kind {
+                TokenKind::Iden { iden } => {
+                    return Ok(Stmt::Fn {
+                        main: tok,
+                        name: iden,
+                        args: self.parse_fn_args()?,
+                        body: Box::new(self.parse_block()?) })
+                }
+                _ => panic!("Expected function name"),
+            }
+        }
+        panic!("Expected function name");
+    }
+
     fn parse_stmt(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
         if self.match_next_token(TokenKind::Sym { sym: "{" }) {
             return self.parse_block();
+        } else if self.match_next_token(TokenKind::Keyword { kw: "fn" }) {
+            return self.parse_fn_decl();
+        } else {
+            let stmt = self.parse_expr()?;
+            match stmt {
+                Expr::PushLeft { ref expr } | Expr::PushRight { ref expr } => {
+                    match **expr {
+                        Expr::Op { op: "if" } => return self.parse_if_stmt(stmt),
+                        Expr::Op { op: "while" } => return self.parse_while_stmt(stmt),
+                        Expr::Op { op: "let" } => return self.parse_let_stmt(stmt),
+                        _ => (),
+                    };
+                }
+
+                _ => (),
+            };
+
+            Ok(Stmt::Expr { expr: stmt })
         }
-
-        let stmt = self.parse_expr()?;
-        match stmt {
-            Expr::PushLeft { ref expr } | Expr::PushRight { ref expr } => {
-                match **expr {
-                    Expr::Op { op: "if" } => return self.parse_if_stmt(stmt),
-                    Expr::Op { op: "while" } => return self.parse_while_stmt(stmt),
-                    Expr::Op { op: "let" } => return self.parse_let_stmt(stmt),
-                    _ => (),
-                };
-            }
-
-            _ => (),
-        };
-
-        Ok(Stmt::Expr { expr: stmt })
     }
 
     pub fn parse(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {

@@ -203,7 +203,7 @@ impl<'src> Lexer<'src> {
                 // --------------------------------------------------------------------------
                 //                          - Sym -
                 // --------------------------------------------------------------------------
-                '!' | ':' | '{' | '}' | '+' | '%' | '>' | '<' => {
+                '!' | ',' | ':' | '{' | '}' | '(' | ')' | '+' | '%' | '>' | '<' => {
                     let tok = TokenKind::Sym {
                         sym: &self.src[index..index + 1],
                     }
@@ -215,12 +215,12 @@ impl<'src> Lexer<'src> {
                 // --------------------------------------------------------------------------
                 //                          - Iden or Keyword -
                 // --------------------------------------------------------------------------
-                'a'..='z' => {
+                'a'..='z' | '_' => {
                     let mut end = index;
 
                     while let Some((_, a)) = self.chars.peek() {
                         match a {
-                            'a'..='z' | '0'..='9' => {
+                            'a'..='z' | '_' | '0'..='9' => {
                                 end += 1;
                                 self.chars.next();
                             }
@@ -231,7 +231,7 @@ impl<'src> Lexer<'src> {
 
                     let text = &self.src[index..=end];
                     let tok = match text {
-                        "dup" | "drop" | "let" | "print" | "println" | "if" | "elif" | "else" | "while"
+                        "dup" | "drop" | "let" | "fn" | "return" | "print" | "println" | "if" | "elif" | "else" | "while"
                         | "eq" | "inc" | "dec" => TokenKind::Keyword { kw: text }.to_token((self.row, self.col)),
 
                         "true" => TokenKind::Boolean(true).to_token((self.row, self.col)),

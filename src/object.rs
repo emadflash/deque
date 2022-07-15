@@ -18,10 +18,16 @@ pub mod object {
             Object::Boolean { value: $a }
         }
     }
+    macro_rules! procedure {
+        ($a:expr) => {
+            Object::Boolean { value: $a }
+        }
+    }
 
     pub(crate) use number;
     pub(crate) use string;
     pub(crate) use boolean;
+    pub(crate) use procedure;
 }
 
 // --------------------------------------------------------------------------

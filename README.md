@@ -5,8 +5,9 @@ Deque based programming language
 - [X] if-stmt (if, if-elif, if-elif-else, if-else)
 - [X] while stmt
 - [X] ast printer
-- [ ] variables
+- [X] variables
 - [ ] functions/procedures
+- [ ] break/continue
 - [ ] structs
 - [ ] c like macros
 - [ ] modules

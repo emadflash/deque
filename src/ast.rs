@@ -52,7 +52,8 @@ pub enum Stmt<'src> {
         conditions: Vec<Expr<'src>>,
         body: Box<Stmt<'src>>,
     },
-    Let { main: Expr<'src>, token: Token<'src>, iden: &'src str }
+    Let { main: Expr<'src>, token: Token<'src>, iden: &'src str },
+    Fn { main: Token<'src>, name: &'src str, args: Vec<&'src str>, body: Box<Stmt<'src>> }
 }
 
 impl<'src> Stmt<'src> {
@@ -153,6 +154,14 @@ fn _print_ast<'src>(_stmt: &Stmt<'src>, mut indent: usize) {
             indent += 4;
             println!("{:indent$}{}: {}", "", colorize_attr!(Token), token, indent=indent);
             println!("{:indent$}{}: {}", "", colorize_attr!(Identifier), iden, indent=indent);
+            indent -= 4;
+            println!("{:indent$}}}", "", indent=indent);
+        }
+        Stmt::Fn { main: _, name, args, body } => {
+            println!("{:indent$}{} {} {{", "", colorize_stmt!(FUNC_DECL), name);
+            indent += 4;
+            println!("{:indent$}{}: {:?}", "", colorize_attr!(Args), args, indent=indent);
+            _print_ast(&*body, indent);
             indent -= 4;
             println!("{:indent$}}}", "", indent=indent);
         }
