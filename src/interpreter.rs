@@ -1,8 +1,6 @@
 use std::collections::VecDeque;
 
 use crate::env::Envirnoment;
-use crate::error::Error;
-use crate::lexer::Token;
 use crate::object::{object, Object};
 use crate::parser::Parser;
 use crate::ast::{Expr, Stmt};
@@ -15,22 +13,23 @@ pub enum RuntimeError {
     #[error("missing argument on deque")]
     MissingArgument,
 
-    #[error("undefined variable")]
-    UndefinedVariable,
+    #[error("undefined variable: {variable:?}")]
+    UndefinedVariable { variable: String },
 }
 
 // --------------------------------------------------------------------------
 //                          - Interpreter -
 // --------------------------------------------------------------------------
-pub struct Interpreter<'a> {
-    env: &'a mut Envirnoment,
+#[derive(Debug, Clone, PartialEq)]
+pub struct Interpreter {
+    env: Envirnoment,
     deque: VecDeque<Object>,
 }
 
-impl<'a, 'src> Interpreter<'a> {
-    pub fn new(env: &'a mut Envirnoment) -> Self {
+impl<'src> Interpreter {
+    pub fn new() -> Self {
         Self { 
-            env,
+            env: Envirnoment::new(),
             deque: VecDeque::new(),
         }
     }
@@ -56,7 +55,7 @@ impl<'a, 'src> Interpreter<'a> {
                     if let Some(value) = self.env.get(iden.to_string()) {
                         self.deque.push_front(value);
                     } else {
-                        return Err(RuntimeError::UndefinedVariable);
+                        return Err(RuntimeError::UndefinedVariable { variable: iden.to_string() });
                     }
                 },
 
@@ -242,11 +241,20 @@ impl<'a, 'src> Interpreter<'a> {
         Ok(())
     }
 
-    #[inline]
-    fn visit_block(&mut self, body: &Stmt<'src>) -> Result<(), RuntimeError> {
-        for stmt in body.unwrap_body() {
+    fn execute_block(&mut self, env: Envirnoment, block: &Stmt<'src>) -> Result<(), RuntimeError> {
+        let previous = self.env.clone();
+        self.env = env;
+        for stmt in block.unwrap_body() {
             self.visit_stmt(stmt)?;
         }
+        self.env = previous;
+        Ok(())
+    }
+
+    #[inline]
+    fn visit_block(&mut self, block: &Stmt<'src>) -> Result<(), RuntimeError> {
+        let env = Envirnoment::with_enclosing(self.env.clone()); 
+        self.execute_block(env, block)?;
         Ok(())
     }
 
@@ -338,6 +346,7 @@ impl<'a, 'src> Interpreter<'a> {
     fn visit_stmt(&mut self, stmt: &Stmt<'src>) -> Result<(), RuntimeError> {
         match stmt {
             Stmt::Expr { expr } => self.eval_expr(expr)?,
+            Stmt::Block { .. } => self.visit_block(stmt)?,
             Stmt::If { .. } => {
                 let _ = self.visit_if_stmt(stmt)?;
             }
@@ -366,8 +375,7 @@ mod tests {
 
     #[test]
     fn interpret_arithmetic_exprs() {
-        let mut env = Envirnoment::new();
-        let mut interpreter = Interpreter::new(&mut env);
+        let mut interpreter = Interpreter::new();
         assert!(interpreter.interpret("!1 !2 !+ !dup !print").is_ok());
         assert_eq!(interpreter.deque, VecDeque::from([object::number!(3.0)]));
     }
@@ -375,22 +383,19 @@ mod tests {
     #[test]
     fn interpret_if_statements() {
         {
-            let mut env = Envirnoment::new();
-            let mut interpreter = Interpreter::new(&mut env);
+            let mut interpreter = Interpreter::new();
             assert!(interpreter.interpret("!if !true { !1 !2 !+ }").is_ok());
             assert_eq!(interpreter.deque, VecDeque::from([object::number!(3.0)]));
         }
 
         {
-            let mut env = Envirnoment::new();
-            let mut interpreter = Interpreter::new(&mut env);
+            let mut interpreter = Interpreter::new();
             assert!(interpreter.interpret("!0 !if !1 !eq { !1 !2 !+ } else { !2 !1 !- }").is_ok());
             assert_eq!(interpreter.deque, VecDeque::from([object::number!(1.0)]));
         }
 
         {
-            let mut env = Envirnoment::new();
-            let mut interpreter = Interpreter::new(&mut env);
+            let mut interpreter = Interpreter::new();
             assert!(interpreter.interpret("
                 !0
                 !if !dup !1 !eq {
@@ -408,8 +413,7 @@ mod tests {
     #[test]
     fn interpret_while_loop() {
         // Series from 0 to 10 (including 10)
-        let mut env = Envirnoment::new();
-        let mut interpreter = Interpreter::new(&mut env);
+        let mut interpreter = Interpreter::new();
         assert!(interpreter.interpret(
                 "
                 !1

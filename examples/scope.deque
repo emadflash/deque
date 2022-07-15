@@ -1,0 +1,18 @@
+-- for demostrating scopes
+
+!69 !let a  -- 'a' is bound to global scope
+!"My name is global" !let global  -- 'a' is bound to global scope
+
+{
+    !70 !let a -- shadows 'a'
+
+    {
+        !123 !let a -- shadows 'a'
+        !a !println  -- print '123'
+        !global !println  -- print '123'
+    }
+
+    !a !println  -- print '70'
+}
+
+!a !println  -- print '69'

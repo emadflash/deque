@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use crate::object::Object;
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct Envirnoment {
     pub variables: HashMap<String, Object>,
     enclosing: Option<Box<Envirnoment>>,
@@ -11,6 +12,13 @@ impl<'a> Envirnoment {
         Self {
             variables: HashMap::new(),
             enclosing: None,
+        }
+    }
+
+    pub fn with_enclosing(env: Envirnoment) -> Self {
+        Self { 
+            variables: HashMap::new(),
+            enclosing: Some(Box::new(env))
         }
     }
 
@@ -26,7 +34,12 @@ impl<'a> Envirnoment {
     pub fn get(&self, variable: String) -> Option<Object> {
         match self.variables.get(&variable) {
             Some(value) => Some(value.clone()),
-            None => None,
+            None => {
+                if let Some(enclosing) = &self.enclosing {
+                    return enclosing.get(variable);
+                }
+                None
+            },
         }
     }
 }

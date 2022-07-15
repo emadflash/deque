@@ -261,8 +261,11 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_stmt(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
-        let stmt = self.parse_expr()?;
+        if self.match_next_token(TokenKind::Sym { sym: "{" }) {
+            return self.parse_block();
+        }
 
+        let stmt = self.parse_expr()?;
         match stmt {
             Expr::PushLeft { ref expr } | Expr::PushRight { ref expr } => {
                 match **expr {

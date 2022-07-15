@@ -1,6 +1,5 @@
 use std::{error::Error, fs};
 
-use deque::env::Envirnoment;
 use deque::interpreter::Interpreter;
 use deque::parser::Parser;
 use deque::lexer::print_lexical_analysis;
@@ -54,8 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if is_lex {
         print_lexical_analysis(&source_files[0]);
     } else {
-        let mut env = Envirnoment::new();
-        let mut interpreter = Interpreter::new(&mut env);
+        let mut interpreter = Interpreter::new();
         interpreter.interpret(&source_files[0])?;
     }
 
