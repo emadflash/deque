@@ -1,4 +1,5 @@
 use std::{fmt, fmt::Display};
+use crate::ast::Stmt;
 
 ////////////////////////////////
 // ~ Helper macros
@@ -13,34 +14,35 @@ pub mod object {
             Object::String { text: $a }
         }
     }
-    macro_rules! boolean {
+    macro_rules! bool {
         ($a:expr) => {
-            Object::Boolean { value: $a }
+            Object::Bool { value: $a }
         }
     }
-    macro_rules! procedure {
-        ($a:expr) => {
-            Object::Boolean { value: $a }
+    macro_rules! function {
+        ($b: expr, $c: expr) => {
+            Object::Function { args: $b, body: $c }
         }
     }
 
     pub(crate) use number;
     pub(crate) use string;
-    pub(crate) use boolean;
-    pub(crate) use procedure;
+    pub(crate) use bool;
+    pub(crate) use function;
 }
 
 // --------------------------------------------------------------------------
 //                          - Object -
 // --------------------------------------------------------------------------
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
-pub enum Object {
+pub enum Object<'src> {
     Number { num: f32 },
     String { text: String },
-    Boolean { value: bool },
+    Bool { value: bool },
+    Function { args: Vec<String>, body: Stmt<'src> },
 }
 
-impl Object {
+impl<'src> Object<'src> {
     pub fn get_num(&self) -> &f32 {
         match self {
             Object::Number { num } => &num,
@@ -57,7 +59,7 @@ impl Object {
 
     pub fn get_bool(&self) -> &bool {
         match self {
-            Object::Boolean { value } => &value,
+            Object::Bool { value } => &value,
             _ => unreachable!(),
         }
     }
@@ -78,18 +80,19 @@ impl Object {
 
     pub fn get_bool_mut(&mut self) -> &mut bool {
         match self {
-            Object::Boolean { ref mut value } => value,
+            Object::Bool { ref mut value } => value,
             _ => unreachable!(),
         }
     }
 }
 
-impl Display for Object {
+impl<'src> Display for Object<'src> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Object::Number { num } => write!(f, "{}", num),
             Object::String { text } => write!(f, "{}", text),
-            Object::Boolean { value } => write!(f, "{}", value),
+            Object::Bool { value } => write!(f, "{}", value),
+            Object::Function { args, body } => write!(f, "args: {:?}, body: {}", args, body),
         }
     }
 }

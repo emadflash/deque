@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use crate::env::Envirnoment;
 use crate::object::{object, Object};
 use crate::parser::Parser;
+use crate::lexer::Token;
 use crate::ast::{Expr, Stmt};
 
 // --------------------------------------------------------------------------
@@ -21,12 +22,12 @@ pub enum RuntimeError {
 //                          - Interpreter -
 // --------------------------------------------------------------------------
 #[derive(Debug, Clone, PartialEq)]
-pub struct Interpreter {
-    env: Envirnoment,
-    deque: VecDeque<Object>,
+pub struct Interpreter<'a> {
+    env: Envirnoment<'a>,
+    deque: VecDeque<Object<'a>>,
 }
 
-impl<'src> Interpreter {
+impl<'a, 'src> Interpreter<'a> {
     pub fn new() -> Self {
         Self { 
             env: Envirnoment::new(),
@@ -38,19 +39,19 @@ impl<'src> Interpreter {
     // ~ Deque Manupilation (Abstraction)
     #[inline] fn deque_front(&self) -> Result<&Object, RuntimeError> { self.deque.front().ok_or(RuntimeError::MissingArgument) }
     #[inline] fn deque_back(&self) -> Result<&Object, RuntimeError> { self.deque.back().ok_or(RuntimeError::MissingArgument) }
-    #[inline] fn deque_front_mut(&mut self) -> Result<&mut Object, RuntimeError> { self.deque.front_mut().ok_or(RuntimeError::MissingArgument) }
-    #[inline] fn deque_back_mut(&mut self) -> Result<&mut Object, RuntimeError> { self.deque.back_mut().ok_or(RuntimeError::MissingArgument) }
-    #[inline] fn deque_pop_front(&mut self) -> Result<Object, RuntimeError> { self.deque.pop_front().ok_or(RuntimeError::MissingArgument) }
-    #[inline] fn deque_pop_back(&mut self) -> Result<Object, RuntimeError> { self.deque.pop_back().ok_or(RuntimeError::MissingArgument) }
+    #[inline] fn deque_front_mut(&'a mut self) -> Result<&mut Object, RuntimeError> { self.deque.front_mut().ok_or(RuntimeError::MissingArgument) }
+    #[inline] fn deque_back_mut(&'a mut self) -> Result<&mut Object, RuntimeError> { self.deque.back_mut().ok_or(RuntimeError::MissingArgument) }
+    #[inline] fn deque_pop_front(&'a mut self) -> Result<Object, RuntimeError> { self.deque.pop_front().ok_or(RuntimeError::MissingArgument) }
+    #[inline] fn deque_pop_back(&'a mut self) -> Result<Object, RuntimeError> { self.deque.pop_back().ok_or(RuntimeError::MissingArgument) }
     
-    fn eval_expr(&mut self, expr: &Expr<'src>) -> Result<(), RuntimeError> {
+    fn eval_expr(&'a mut self, expr: &Expr<'src>) -> Result<(), RuntimeError> {
         match expr {
             Expr::PushLeft { expr } => match **expr {
                 ////////////////////////////////
                 // ~ Literals
                 Expr::Number { num } => self.deque.push_front(object::number!(num)),
                 Expr::String { text } => self.deque.push_front(object::string!(text.to_string())),
-                Expr::Boolean(value) => self.deque.push_front(object::boolean!(value)),
+                Expr::Boolean(value) => self.deque.push_front(object::bool!(value)),
                 Expr::Iden { iden } => {
                     if let Some(value) = self.env.get(iden.to_string()) {
                         self.deque.push_front(value);
@@ -112,9 +113,9 @@ impl<'src> Interpreter {
                         let b = self.deque_pop_front()?;
 
                         if a == b {
-                            self.deque.push_front(object::boolean!(true));
+                            self.deque.push_front(object::bool!(true));
                         } else {
-                            self.deque.push_front(object::boolean!(false));
+                            self.deque.push_front(object::bool!(false));
                         }
                     }
                     ">" => {
@@ -122,9 +123,9 @@ impl<'src> Interpreter {
                         let b = self.deque_pop_front()?;
 
                         if a > b {
-                            self.deque.push_front(object::boolean!(true));
+                            self.deque.push_front(object::bool!(true));
                         } else {
-                            self.deque.push_front(object::boolean!(false));
+                            self.deque.push_front(object::bool!(false));
                         }
                     }
                     "<" => {
@@ -132,9 +133,9 @@ impl<'src> Interpreter {
                         let b = self.deque_pop_front()?;
 
                         if a < b {
-                            self.deque.push_front(object::boolean!(true));
+                            self.deque.push_front(object::bool!(true));
                         } else {
-                            self.deque.push_front(object::boolean!(false));
+                            self.deque.push_front(object::bool!(false));
                         }
                     }
 
@@ -148,7 +149,7 @@ impl<'src> Interpreter {
                 // ~ Literals
                 Expr::Number { num } => self.deque.push_back(object::number!(num)),
                 Expr::String { text } => self.deque.push_back(object::string!(text.to_string())),
-                Expr::Boolean(value) => self.deque.push_back(object::boolean!(value)),
+                Expr::Boolean(value) => self.deque.push_back(object::bool!(value)),
 
                 ////////////////////////////////
                 // ~ Ops/Builtins
@@ -203,9 +204,9 @@ impl<'src> Interpreter {
                         let b = self.deque_pop_back()?;
 
                         if a == b {
-                            self.deque.push_front(object::boolean!(true));
+                            self.deque.push_front(object::bool!(true));
                         } else {
-                            self.deque.push_front(object::boolean!(false));
+                            self.deque.push_front(object::bool!(false));
                         }
                     }
                     ">" => {
@@ -213,9 +214,9 @@ impl<'src> Interpreter {
                         let b = self.deque_pop_back()?;
 
                         if a > b {
-                            self.deque.push_front(object::boolean!(true));
+                            self.deque.push_front(object::bool!(true));
                         } else {
-                            self.deque.push_front(object::boolean!(false));
+                            self.deque.push_front(object::bool!(false));
                         }
                     }
                     "<" => {
@@ -223,9 +224,9 @@ impl<'src> Interpreter {
                         let b = self.deque_pop_back()?;
 
                         if a < b {
-                            self.deque.push_front(object::boolean!(true));
+                            self.deque.push_front(object::bool!(true));
                         } else {
-                            self.deque.push_front(object::boolean!(false));
+                            self.deque.push_front(object::bool!(false));
                         }
                     }
 
@@ -241,7 +242,7 @@ impl<'src> Interpreter {
         Ok(())
     }
 
-    fn execute_block(&mut self, env: Envirnoment, block: &Stmt<'src>) -> Result<(), RuntimeError> {
+    fn execute_block(&'a mut self, env: Envirnoment<'a>, block: &Stmt<'src>) -> Result<(), RuntimeError> {
         let previous = self.env.clone();
         self.env = env;
         for stmt in block.unwrap_body() {
@@ -252,13 +253,13 @@ impl<'src> Interpreter {
     }
 
     #[inline]
-    fn visit_block(&mut self, block: &Stmt<'src>) -> Result<(), RuntimeError> {
+    fn visit_block(&'a mut self, block: &Stmt<'src>) -> Result<(), RuntimeError> {
         let env = Envirnoment::with_enclosing(self.env.clone()); 
         self.execute_block(env, block)?;
         Ok(())
     }
 
-    fn visit_if_stmt(&mut self, stmt: &Stmt<'src>) -> Result<bool, RuntimeError> {
+    fn visit_if_stmt(&'a mut self, stmt: &Stmt<'src>) -> Result<bool, RuntimeError> {
         let (main, conditions, body) = stmt.unwrap_if();
         let mut flag = false;
 
@@ -287,7 +288,7 @@ impl<'src> Interpreter {
         Ok(flag)
     }
 
-    fn visit_ifelse_stmt(&mut self, master: &Stmt<'src>, alternates: &Vec<Stmt<'src>>) -> Result<(), RuntimeError> {
+    fn visit_ifelse_stmt(&'a mut self, master: &Stmt<'src>, alternates: &Vec<Stmt<'src>>) -> Result<(), RuntimeError> {
         if !self.visit_if_stmt(master)? {
             for alternate in alternates {
                 match alternate {
@@ -306,7 +307,7 @@ impl<'src> Interpreter {
         Ok(())
     }
 
-    fn visit_while_stmt(&mut self, main: &Expr<'src>, conditions: &Vec<Expr<'src>>, body: &Box<Stmt<'src>>) -> Result<(), RuntimeError> {
+    fn visit_while_stmt(&'a mut self, main: &Expr<'src>, conditions: &Vec<Expr<'src>>, body: &Box<Stmt<'src>>) -> Result<(), RuntimeError> {
         loop {
             // interpret condition
             for condition in conditions {
@@ -330,7 +331,7 @@ impl<'src> Interpreter {
         Ok(())
     }
 
-    fn visit_let_stmt(&mut self, main: &Expr<'src>, iden: &'src str) -> Result<(), RuntimeError> {
+    fn visit_let_stmt(&'a mut self, main: &Expr<'src>, iden: &'src str) -> Result<(), RuntimeError> {
         let value;
 
         if matches!(main, Expr::PushLeft { .. }) {
@@ -343,11 +344,14 @@ impl<'src> Interpreter {
         Ok(())
     }
 
-    fn visit_fn_decl_stmt(&mut self) -> Result<(), RuntimeError> {
+    fn visit_fn_decl_stmt(&'a mut self, main: &Token<'src>, name: &'src str,
+            args: &Vec<&'src str>, body: &Box<Stmt<'src>>) -> Result<(), RuntimeError> {
+        let args = args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
+        self.env.define(name.to_string(), object::function!(args.to_owned(), *body.clone()));
         Ok(())
     }
 
-    fn visit_stmt(&mut self, stmt: &Stmt<'src>) -> Result<(), RuntimeError> {
+    fn visit_stmt(&'a mut self, stmt: &Stmt<'src>) -> Result<(), RuntimeError> {
         match stmt {
             Stmt::Expr { expr } => self.eval_expr(expr)?,
             Stmt::Block { .. } => self.visit_block(stmt)?,
@@ -357,7 +361,7 @@ impl<'src> Interpreter {
             Stmt::IfElse { master, alternates } => self.visit_ifelse_stmt(master, alternates)?,
             Stmt::While { main, conditions, body } => self.visit_while_stmt(main, conditions, body)?,
             Stmt::Let { main, iden, .. } => self.visit_let_stmt(main, iden)?,
-            Stmt::Fn { main, name, args, body } => self.visit_fn_decl_stmt()?,
+            Stmt::Fn { main, name, args, body } => self.visit_fn_decl_stmt(main, name, args, body)?,
             _ => unreachable!()
         }
 

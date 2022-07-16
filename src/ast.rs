@@ -3,14 +3,30 @@ use crate::lexer::Token;
 use ansi_term::Color;
 
 // --------------------------------------------------------------------------
+//                          - Helper macros -
+// --------------------------------------------------------------------------
+macro_rules! colorize_stmt {
+    ($a:expr) => {
+        Color::Cyan.bold().paint(stringify!($a))
+    }
+}
+
+macro_rules! colorize_attr {
+    ($a:expr) => {
+        Color::Green.paint(stringify!($a))
+    }
+}
+
+// --------------------------------------------------------------------------
 //                          - Expr -
 // --------------------------------------------------------------------------
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum Expr<'src> {
     Number { num: f32 },
     String { text: &'src str },
     Boolean(bool),
     Iden { iden: &'src str },
+    FnCall { main: Token<'src>, name: &'src str },
     Op { op: &'src str },
     PushLeft { expr: Box<Expr<'src>> },
     PushRight { expr: Box<Expr<'src>> },
@@ -24,6 +40,7 @@ impl<'src> Display for Expr<'src> {
             Expr::Boolean(value) => write!(f, "{}", value),
             Expr::Iden { iden } => write!(f, "{}", iden),
             Expr::Op { op } => write!(f, "{}", op),
+            Expr::FnCall { main: _, name } => write!(f, "{} {}()", colorize_attr!(FN_CALL), name),
             Expr::PushLeft { expr } => write!(f, "PushLeft({})", expr),
             Expr::PushRight { expr } => write!(f, "PushRight({})", expr),
         }
@@ -33,7 +50,7 @@ impl<'src> Display for Expr<'src> {
 // --------------------------------------------------------------------------
 //                          - Stmt -
 // --------------------------------------------------------------------------
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum Stmt<'src> {
     Program { stmts: Vec<Stmt<'src>> },
     Expr { expr: Expr<'src> },
@@ -80,18 +97,6 @@ impl<'src> Stmt<'src> {
 }
 
 fn _print_ast<'src>(_stmt: &Stmt<'src>, mut indent: usize) {
-    macro_rules! colorize_stmt {
-        ($a:expr) => {
-            Color::Cyan.bold().paint(stringify!($a))
-        }
-    }
-
-    macro_rules! colorize_attr {
-        ($a:expr) => {
-            Color::Green.paint(stringify!($a))
-        }
-    }
-
     macro_rules! nest {
         ($a:block) => {
             indent += 4;

@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use crate::object::Object;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Envirnoment {
-    pub variables: HashMap<String, Object>,
-    enclosing: Option<Box<Envirnoment>>,
+pub struct Envirnoment<'a> {
+    pub variables: HashMap<String, Object<'a>>,
+    enclosing: Option<Box<Envirnoment<'a>>>,
 }
 
-impl<'a> Envirnoment {
+impl<'a> Envirnoment<'a> {
     pub fn new() -> Self {
         Self {
             variables: HashMap::new(),
@@ -15,14 +15,14 @@ impl<'a> Envirnoment {
         }
     }
 
-    pub fn with_enclosing(env: Envirnoment) -> Self {
+    pub fn with_enclosing(env: Envirnoment<'a>) -> Self {
         Self { 
             variables: HashMap::new(),
             enclosing: Some(Box::new(env))
         }
     }
 
-    pub fn define(&mut self, target: String, value: Object) {
+    pub fn define(&mut self, target: String, value: Object<'a>) {
         if self.variables.contains_key(&target) {
             let __value = self.variables.get_mut(&target).unwrap();
             *__value = value;
@@ -31,7 +31,7 @@ impl<'a> Envirnoment {
         }
     }
 
-    pub fn get(&self, variable: String) -> Option<Object> {
+    pub fn get(&self, variable: String) -> Option<Object<'a>> {
         match self.variables.get(&variable) {
             Some(value) => Some(value.clone()),
             None => {

@@ -89,9 +89,23 @@ impl<'src> Parser<'src> {
                         expr: Box::new(Expr::Boolean(value)),
                     }),
 
-                    TokenKind::Iden { iden } => Ok(Expr::PushLeft {
-                        expr: Box::new(Expr::Iden { iden })
-                    }),
+                    TokenKind::Iden { iden } => {
+                        if self.match_next_token(TokenKind::Sym { sym: "(" }) {
+                            self.expect(TokenKind::Sym { sym: "(" })?;
+                            self.expect(TokenKind::Sym { sym: ")" })?;
+
+                            Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::FnCall {
+                                    main: tok,
+                                    name: iden,
+                                })
+                            })
+                        } else {
+                            Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Iden { iden })
+                            })
+                        }
+                    }
 
                     TokenKind::Keyword { kw } => match &kw {
                         &"dup" | &"drop" | &"let" | &"return" | &"print" | &"println" | &"if" | &"while" | &"eq" | &"inc" | &"dec" => {

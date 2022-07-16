@@ -15,7 +15,7 @@ pub enum LexerError {
 // --------------------------------------------------------------------------
 //                          - TokenKind -
 // --------------------------------------------------------------------------
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum TokenKind<'src> {
     Sym { sym: &'src str },
     Iden { iden: &'src str },
@@ -29,7 +29,7 @@ pub enum TokenKind<'src> {
 // --------------------------------------------------------------------------
 //                          - Token -
 // --------------------------------------------------------------------------
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Token<'src> {
     pub kind: TokenKind<'src>,
     pub pos: (usize, usize),
