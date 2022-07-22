@@ -1,13 +1,13 @@
 use std::iter::Peekable;
 
-use crate::lexer::{TokenKind, Lexer, LexerError};
-use crate::ast::{Expr, Stmt};
+use crate::lexer::*;
+use crate::ast::*;
 
 // --------------------------------------------------------------------------
 //                          - ParseError -
 // --------------------------------------------------------------------------
 #[derive(thiserror::Error, Debug, PartialEq)]
-pub enum ParseError<'src> {
+pub enum ParseError {
     #[error("Lexer error")]
     LexerError(#[from] LexerError),
 
@@ -16,12 +16,12 @@ pub enum ParseError<'src> {
 
     #[error("Invaild token kind (expected: {expected:?}, found: {found:?}")]
     InvaildTokenKind {
-        expected: TokenKind<'src>,
-        found: TokenKind<'src>,
+        expected: TokenKind,
+        found: TokenKind,
     },
 }
 
-impl<'src> From<&LexerError> for ParseError<'src> {
+impl From<&LexerError> for ParseError {
     fn from(e: &LexerError) -> Self {
         ParseError::LexerError(e.clone())
     }
@@ -31,12 +31,12 @@ impl<'src> From<&LexerError> for ParseError<'src> {
 //                          - Parser -
 // --------------------------------------------------------------------------
 #[derive(Debug)]
-pub struct Parser<'src> {
-    lexer: Peekable<Lexer<'src>>
+pub struct Parser<'a> {
+    lexer: Peekable<Lexer<'a>>
 }
 
-impl<'src> Parser<'src> {
-    pub fn new(src: &'src str) -> anyhow::Result<Parser> {
+impl<'a, 'src> Parser<'a> {
+    pub fn new(src: &'a str) -> anyhow::Result<Parser> {
         Ok(Self {
             lexer: Lexer::new(src).peekable(),
         })
@@ -45,7 +45,7 @@ impl<'src> Parser<'src> {
     // --------------------------------------------------------------------------
     //                          - Helpers -
     // --------------------------------------------------------------------------
-    fn match_next_token(&mut self, expected_kind: TokenKind<'src>) -> bool {
+    fn match_next_token(&mut self, expected_kind: TokenKind) -> bool {
         let tok = self.lexer.peek().expect("Token for peeking");
         match tok {
             Err(_) => false,
@@ -58,7 +58,7 @@ impl<'src> Parser<'src> {
         }
     }
 
-    fn expect(&mut self, expected_kind: TokenKind<'src>) -> Result<(), ParseError<'src>> {
+    fn expect(&mut self, expected_kind: TokenKind) -> Result<(), ParseError> {
         let tok = self.lexer.peek().expect("Token for peeking");
         if tok.as_ref()?.kind == expected_kind {
             self.lexer.next();
@@ -71,11 +71,11 @@ impl<'src> Parser<'src> {
     // --------------------------------------------------------------------------
     //                          - Expr -
     // --------------------------------------------------------------------------
-    fn parse_expr(&mut self) -> anyhow::Result<Expr<'src>, ParseError<'src>> {
+    fn parse_expr(&mut self) -> anyhow::Result<Expr, ParseError> {
         let tok = self.lexer.next().expect("expression")?;
 
         let expr = match tok.kind {
-            TokenKind::Sym { sym: "!" } => match self.lexer.next() {
+            TokenKind::Punctuation { kind: PunctuationKind::Bang, .. } => match self.lexer.next() {
                 Some(arg) => match arg?.kind {
                     TokenKind::Number { num, .. } => Ok(Expr::PushLeft {
                         expr: Box::new(Expr::Number { num }),
@@ -93,18 +93,58 @@ impl<'src> Parser<'src> {
                         expr: Box::new(Expr::Iden { iden })
                     }),
 
-                    TokenKind::Keyword { kw } => match &kw {
-                        &"dup" | &"drop" | &"let" | &"return" | &"print" | &"println" | &"if" | &"while" | &"eq" | &"inc" | &"dec" => {
-                            Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { op: kw }),
-                            })
-                        }
+                    TokenKind::Keyword { kind } => match &kind {
+                        KwKind::Dup => Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Op { kind: OpKind::Dup }),
+                        }),
+                        KwKind::_Drop => Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Op { kind: OpKind::_Drop }),
+                        }),
+                        KwKind::_Eq => Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Op { kind: OpKind::_Eq }),
+                        }),
+                        KwKind::Let => Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Op { kind: OpKind::Let }),
+                        }),
+                        KwKind::Return => Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Op { kind: OpKind::Return }),
+                        }),
+                        KwKind::If => Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Op { kind: OpKind::If }),
+                        }),
+                        KwKind::While => Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Op { kind: OpKind::While }),
+                        }),
+                        KwKind::Inc => Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Op { kind: OpKind::Inc }),
+                        }),
+                        KwKind::Dec => Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Op { kind: OpKind::Dec }),
+                        }),
+                        KwKind::Print => Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Op { kind: OpKind::Print }),
+                        }),
+                        KwKind::Println => Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Op { kind: OpKind::Println }),
+                        }),
                         _ => unreachable!(),
                     },
 
-                    TokenKind::Sym { sym } => match &sym {
-                        &"+" | &"-" | &"%" | &"<" | &">" => Ok(Expr::PushLeft {
-                            expr: Box::new(Expr::Op { op: sym }),
+                    TokenKind::Punctuation { kind, .. } => match &kind {
+                        PunctuationKind::Plus => Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Op { kind: OpKind::Plus }),
+                        }),
+                        PunctuationKind::Minus => Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Op { kind: OpKind::Minus }),
+                        }),
+                        PunctuationKind::Mod => Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Op { kind: OpKind::Mod }),
+                        }),
+                        PunctuationKind::GreaterThan => Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Op { kind: OpKind::GreaterThan }),
+                        }),
+                        PunctuationKind::LessThan => Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Op { kind: OpKind::LessThan }),
                         }),
                         _ => unreachable!(),
                     },
@@ -115,51 +155,96 @@ impl<'src> Parser<'src> {
                 None => Err(ParseError::MissingExpr),
             },
 
-            TokenKind::Keyword { kw } => match &kw {
-                &"dup" | &"drop" | &"let" | &"return" | &"print" | &"println" | &"if" | &"while" | &"eq" | &"inc" | &"dec" => {
-                    self.expect(TokenKind::Sym { sym: "!" })?;
-                    Ok(Expr::PushRight {
-                        expr: Box::new(Expr::Op { op: kw }),
-                    })
-                }
-                _ => unreachable!(),
-            },
+            TokenKind::Keyword { kind, .. } => {
+                self.expect(TokenKind::Punctuation { kind: PunctuationKind::Bang, ch: '!' })?;
+                let op = match &kind {
+                    KwKind::Dup => Ok(Expr::PushRight {
+                            expr: Box::new(Expr::Op { kind: OpKind::Dup }),
+                    }),
+                    KwKind::_Drop => Ok(Expr::PushRight {
+                            expr: Box::new(Expr::Op { kind: OpKind::_Drop }),
+                    }),
+                    KwKind::_Eq => Ok(Expr::PushLeft {
+                            expr: Box::new(Expr::Op { kind: OpKind::_Eq }),
+                        }),
+                    KwKind::Let => Ok(Expr::PushRight {
+                            expr: Box::new(Expr::Op { kind: OpKind::Let }),
+                    }),
+                    KwKind::Return => Ok(Expr::PushRight {
+                            expr: Box::new(Expr::Op { kind: OpKind::Return }),
+                    }),
+                    KwKind::If => Ok(Expr::PushRight {
+                            expr: Box::new(Expr::Op { kind: OpKind::If }),
+                    }),
+                    KwKind::While => Ok(Expr::PushRight {
+                            expr: Box::new(Expr::Op { kind: OpKind::While }),
+                    }),
+                    KwKind::Inc => Ok(Expr::PushRight {
+                            expr: Box::new(Expr::Op { kind: OpKind::Inc }),
+                    }),
+                    KwKind::Dec => Ok(Expr::PushRight {
+                            expr: Box::new(Expr::Op { kind: OpKind::Dec }),
+                    }),
+                    KwKind::Print => Ok(Expr::PushRight {
+                            expr: Box::new(Expr::Op { kind: OpKind::Print }),
+                    }),
+                    KwKind::Println => Ok(Expr::PushRight {
+                            expr: Box::new(Expr::Op { kind: OpKind::Println }),
+                    }),
+                    _ => unreachable!(),
+                };
+                op
+            }
 
-            TokenKind::Sym { sym } => match &sym {
-                &"+" | &"-" | &"%" | &"<" | &">" => {
-                    self.expect(TokenKind::Sym { sym: "!" })?;
-                    Ok(Expr::PushRight{
-                        expr: Box::new(Expr::Op { op: sym }),
-                    })
-                },
-                _ => unreachable!("this: {:?}", tok),
-            },
+            TokenKind::Punctuation { kind, .. } => {
+                self.expect(TokenKind::Punctuation { kind: PunctuationKind::Bang, ch: '!' })?;
+                let op = match &kind {
+                    PunctuationKind::Plus => Ok(Expr::PushRight {
+                            expr: Box::new(Expr::Op { kind: OpKind::Plus }),
+                    }),
+                    PunctuationKind::Minus => Ok(Expr::PushRight {
+                            expr: Box::new(Expr::Op { kind: OpKind::Minus }),
+                    }),
+                    PunctuationKind::Mod => Ok(Expr::PushRight {
+                            expr: Box::new(Expr::Op { kind: OpKind::Mod }),
+                    }),
+                    PunctuationKind::GreaterThan => Ok(Expr::PushRight {
+                            expr: Box::new(Expr::Op { kind: OpKind::GreaterThan }),
+                    }),
+                    PunctuationKind::LessThan => Ok(Expr::PushRight {
+                            expr: Box::new(Expr::Op { kind: OpKind::LessThan }),
+                    }),
+                    _ => unreachable!(),
+                };
+
+                op
+            }
 
             TokenKind::Number { num, .. } => {
                 // TODO: Provide more context, error like expecting a right op
-                self.expect(TokenKind::Sym { sym: "!" })?;
+                self.expect(TokenKind::Punctuation { kind: PunctuationKind::Bang, ch: '!' })?;
                 Ok(Expr::PushRight {
                     expr: Box::new(Expr::Number { num }),
                 })
             },
 
             TokenKind::String { text } => {
-                self.expect(TokenKind::Sym { sym: "!" })?;
+                self.expect(TokenKind::Punctuation { kind: PunctuationKind::Bang, ch: '!' })?;
                 Ok(Expr::PushRight {
                     expr: Box::new(Expr::String { text }),
                 })
             }
 
             TokenKind::Boolean(value) => {
-                self.expect(TokenKind::Sym { sym: "!" })?;
+                self.expect(TokenKind::Punctuation { kind: PunctuationKind::Bang, ch: '!' })?;
                 Ok(Expr::PushRight {
                     expr: Box::new(Expr::Boolean(value)),
                 })
             },
 
             TokenKind::Iden { iden } => {
-                self.expect(TokenKind::Sym { sym: "!" })?;
-                Ok(Expr::PushLeft {
+                self.expect(TokenKind::Punctuation { kind: PunctuationKind::Bang, ch: '!' })?;
+                Ok(Expr::PushRight {
                     expr: Box::new(Expr::Iden { iden })
                 })
             }
@@ -172,29 +257,29 @@ impl<'src> Parser<'src> {
     // --------------------------------------------------------------------------
     //                          - Body/Block -
     // --------------------------------------------------------------------------
-    fn parse_block(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
-        self.expect(TokenKind::Sym { sym: "{" })?;
-        let mut stmts: Vec<Stmt<'src>> = Vec::new();
+    fn parse_block(&mut self) -> anyhow::Result<Stmt, ParseError> {
+        self.expect(TokenKind::Punctuation { kind: PunctuationKind::LeftCurly, ch: '{' })?;
+        let mut stmts: Vec<Stmt> = Vec::new();
 
         while let Some(tok) = self.lexer.peek() {
-            if matches!(tok.as_ref()?.kind, TokenKind::Sym { sym: "}" }) {
+            if matches!(tok.as_ref()?.kind, TokenKind::Punctuation { kind: PunctuationKind::RightCurly, ch: '}' }) {
                 break;
             }
             stmts.push(self.parse_stmt()?);
         }
 
-        self.expect(TokenKind::Sym { sym: "}" })?;
+        self.expect(TokenKind::Punctuation { kind: PunctuationKind::RightCurly, ch: '}' })?;
         Ok(Stmt::Block { stmts })
     }
 
     // --------------------------------------------------------------------------
     //                          - If -
     // --------------------------------------------------------------------------
-    fn parse_if_block(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
-        let mut conditions: Vec<Expr<'src>> = Vec::new();
+    fn parse_if_block(&mut self, main: Expr) -> anyhow::Result<Stmt, ParseError> {
+        let mut conditions: Vec<Expr> = Vec::new();
 
         while let Some(tok) = self.lexer.peek() {
-            if matches!(tok.as_ref()?.kind, TokenKind::Sym { sym: "{" }) {
+            if matches!(tok.as_ref()?.kind, TokenKind::Punctuation {  kind: PunctuationKind::LeftCurly, ch: '{'}) {
                 break;
             }
             conditions.push(self.parse_expr()?);
@@ -207,16 +292,16 @@ impl<'src> Parser<'src> {
         Ok(Stmt::If { main, conditions, body: Box::new(self.parse_block()?) })
     }
 
-    fn parse_if_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
+    fn parse_if_stmt(&mut self, main: Expr) -> anyhow::Result<Stmt, ParseError> {
         let master = self.parse_if_block(main.clone())?;
-        let mut alternates: Vec<Stmt<'src>> = Vec::new();
+        let mut alternates: Vec<Stmt> = Vec::new();
 
-        while self.match_next_token(TokenKind::Keyword { kw: "elif" }) {
+        while self.match_next_token(TokenKind::Keyword { kind: KwKind::Elif }) {
             self.lexer.next();
             alternates.push(self.parse_if_block(main.clone())?);
         }
 
-        if self.match_next_token(TokenKind::Keyword { kw: "else" }) {
+        if self.match_next_token(TokenKind::Keyword { kind: KwKind::Else}) {
             self.lexer.next();
             alternates.push(self.parse_block()?);
         }
@@ -227,11 +312,11 @@ impl<'src> Parser<'src> {
         Ok(Stmt::IfElse { master: Box::new(master), alternates })
     }
 
-    fn parse_while_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
-        let mut conditions: Vec<Expr<'src>> = Vec::new();
+    fn parse_while_stmt(&mut self, main: Expr) -> anyhow::Result<Stmt, ParseError> {
+        let mut conditions: Vec<Expr> = Vec::new();
 
         while let Some(tok) = self.lexer.peek() {
-            if matches!(tok.as_ref()?.kind, TokenKind::Sym { sym: "{" }) {
+            if matches!(tok.as_ref()?.kind, TokenKind::Punctuation {  kind: PunctuationKind::LeftCurly, ch: '{'}) {
                 break;
             }
             conditions.push(self.parse_expr()?);
@@ -244,14 +329,13 @@ impl<'src> Parser<'src> {
         })
     }
 
-    fn parse_let_stmt(&mut self, main: Expr<'src>) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
+    fn parse_let_stmt(&mut self, main: Expr) -> anyhow::Result<Stmt, ParseError> {
         if let Some(tok) = self.lexer.next() {
             let tok = tok?;
             match tok.kind {
-                TokenKind::Iden { iden } => return Ok(Stmt::Let {
+                TokenKind::Iden { .. } => return Ok(Stmt::Let {
                     main,
                     token: tok.clone(),
-                    iden
                 }),
                 _ => panic!("expected a identifier"),
             }
@@ -260,11 +344,11 @@ impl<'src> Parser<'src> {
         panic!()
     }
 
-    fn parse_fn_args(&mut self) -> anyhow::Result<Vec<&'src str>, ParseError<'src>> {
-        self.expect(TokenKind::Sym { sym: "(" })?;
-        let mut args: Vec<&'src str> = Vec::new();
+    fn parse_fn_args(&mut self) -> anyhow::Result<Vec<String>, ParseError> {
+        self.expect(TokenKind::Punctuation { kind: PunctuationKind::LeftParen, ch: '(' })?;
+        let mut args: Vec<String> = Vec::new();
 
-        if self.match_next_token(TokenKind::Sym { sym: ")" }) {
+        if self.match_next_token(TokenKind::Punctuation { kind: PunctuationKind::LeftParen, ch: ')' }) {
             return Ok(args);
         }
 
@@ -275,9 +359,9 @@ impl<'src> Parser<'src> {
         }
 
         while let Some(tok) = self.lexer.peek() {
-            if matches!(tok.as_ref()?.kind, TokenKind::Sym { sym: ")" }) {
+            if matches!(tok.as_ref()?.kind, TokenKind::Punctuation { kind: PunctuationKind::RightParen, ch: ')' }) {
                 break;
-            } else if matches!(tok.as_ref()?.kind, TokenKind::Sym { sym: "," }) {
+            } else if matches!(tok.as_ref()?.kind, TokenKind::Punctuation { kind: PunctuationKind::Comma, ch: ',' }) {
                 self.lexer.next();
             }
 
@@ -290,19 +374,18 @@ impl<'src> Parser<'src> {
             }
         }
 
-        self.expect(TokenKind::Sym { sym: ")" })?;
+        self.expect(TokenKind::Punctuation { kind: PunctuationKind::RightParen, ch: ')' })?;
         Ok(args)
     }
 
-    fn parse_fn_decl(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
-        self.expect(TokenKind::Keyword { kw: "fn" })?;
+    fn parse_fn_decl(&mut self) -> anyhow::Result<Stmt, ParseError> {
+        self.expect(TokenKind::Keyword { kind: KwKind::_Fn})?;
         if let Some(tok) = self.lexer.next() {
             let tok = tok?;
             match tok.kind {
-                TokenKind::Iden { iden } => {
+                TokenKind::Iden { .. } => {
                     return Ok(Stmt::Fn {
                         main: tok,
-                        name: iden,
                         args: self.parse_fn_args()?,
                         body: Box::new(self.parse_block()?) })
                 }
@@ -312,19 +395,19 @@ impl<'src> Parser<'src> {
         panic!("Expected function name");
     }
 
-    fn parse_stmt(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
-        if self.match_next_token(TokenKind::Sym { sym: "{" }) {
+    fn parse_stmt(&mut self) -> anyhow::Result<Stmt, ParseError> {
+        if self.match_next_token(TokenKind::Punctuation { kind: PunctuationKind::LeftCurly, ch: '{' }) {
             return self.parse_block();
-        } else if self.match_next_token(TokenKind::Keyword { kw: "fn" }) {
+        } else if self.match_next_token(TokenKind::Keyword { kind: KwKind::_Fn}) {
             return self.parse_fn_decl();
         } else {
             let stmt = self.parse_expr()?;
             match stmt {
                 Expr::PushLeft { ref expr } | Expr::PushRight { ref expr } => {
                     match **expr {
-                        Expr::Op { op: "if" } => return self.parse_if_stmt(stmt),
-                        Expr::Op { op: "while" } => return self.parse_while_stmt(stmt),
-                        Expr::Op { op: "let" } => return self.parse_let_stmt(stmt),
+                        Expr::Op { kind: OpKind::If} => return self.parse_if_stmt(stmt),
+                        Expr::Op { kind: OpKind::While } => return self.parse_while_stmt(stmt),
+                        Expr::Op { kind: OpKind::Let} => return self.parse_let_stmt(stmt),
                         _ => (),
                     };
                 }
@@ -336,7 +419,7 @@ impl<'src> Parser<'src> {
         }
     }
 
-    pub fn parse(&mut self) -> anyhow::Result<Stmt<'src>, ParseError<'src>> {
+    pub fn parse(&mut self) -> anyhow::Result<Stmt, ParseError> {
         let mut stmts: Vec<Stmt> = Vec::new();
 
         while let Some(tok) = self.lexer.peek() {
@@ -369,12 +452,12 @@ mod tests {
             Ok(program!(vec![
                 Stmt::Expr {
                     expr: Expr::PushLeft {
-                        expr: Box::new(Expr::Op { op: "+" })
+                        expr: Box::new(Expr::Op { kind: OpKind::Plus})
                     }
                 },
                 Stmt::Expr {
                     expr: Expr::PushLeft {
-                        expr: Box::new(Expr::Op { op: "-" })
+                        expr: Box::new(Expr::Op { kind: OpKind::Minus})
                     }
                 },
                 Stmt::Expr {
@@ -384,22 +467,22 @@ mod tests {
                 },
                 Stmt::Expr {
                     expr: Expr::PushLeft {
-                        expr: Box::new(Expr::Op { op: "-" })
+                        expr: Box::new(Expr::Op {  kind: OpKind::Minus})
                     }
                 },
                 Stmt::Expr {
                     expr: Expr::PushRight {
-                        expr: Box::new(Expr::Op { op: "dup" })
+                        expr: Box::new(Expr::Op { kind: OpKind::Dup})
                     }
                 },
                 Stmt::Expr {
                     expr: Expr::PushLeft {
-                        expr: Box::new(Expr::Op { op: ">" })
+                        expr: Box::new(Expr::Op { kind: OpKind::GreaterThan })
                     }
                 },
                 Stmt::Expr {
                     expr: Expr::PushRight {
-                        expr: Box::new(Expr::Op { op: "<" })
+                        expr: Box::new(Expr::Op { kind: OpKind::LessThan })
                     }
                 },
             ]))
@@ -415,7 +498,7 @@ mod tests {
             Ok(program!(vec![
                 Stmt::If {
                     main: Expr::PushLeft {
-                        expr: Box::new(Expr::Op { op: "if" })
+                        expr: Box::new(Expr::Op { kind: OpKind::If})
                     },
                     conditions: vec![
                          Expr::PushLeft {
@@ -456,7 +539,7 @@ mod tests {
                 Stmt::IfElse {
                     master: Box::new(Stmt::If {
                         main: Expr::PushLeft {
-                            expr: Box::new(Expr::Op { op: "if" })
+                            expr: Box::new(Expr::Op { kind: OpKind::If})
                         },
                         conditions: vec![
                             Expr::PushLeft {
@@ -470,24 +553,24 @@ mod tests {
                     alternates: vec![
                         Stmt::If {
                             main: Expr::PushLeft {
-                                expr: Box::new(Expr::Op { op: "if" })
+                                expr: Box::new(Expr::Op { kind: OpKind::If})
                             },
                             conditions: vec![
                                 Expr::PushLeft {
-                                    expr: Box::new(Expr::Op { op: "dup" }),
+                                    expr: Box::new(Expr::Op { kind: OpKind::Dup})
                                 },
                                 Expr::PushLeft {
-                                    expr: Box::new(Expr::Op { op: ">" }),
+                                    expr: Box::new(Expr::Op { kind: OpKind::GreaterThan })
                                 },
                             ],
                             body: Box::new(Stmt::Block { stmts: vec![] })
                         },
                         Stmt::If {
                             main: Expr::PushLeft {
-                                expr: Box::new(Expr::Op { op: "if" })
+                                expr: Box::new(Expr::Op { kind: OpKind::If})
                             },
                             conditions: vec![Expr::PushRight {
-                                expr: Box::new(Expr::Op { op: "dup" }),
+                                expr: Box::new(Expr::Op { kind: OpKind::Dup})
                             },],
                             body: Box::new(Stmt::Block {
                                 stmts: vec![
@@ -503,7 +586,7 @@ mod tests {
                 },
                 Stmt::Expr {
                     expr: Expr::PushLeft {
-                        expr: Box::new(Expr::Op { op: "eq" }),
+                        expr: Box::new(Expr::Op { kind: OpKind::_Eq})
                     },
                 }
             ]))
@@ -522,7 +605,7 @@ mod tests {
                 Stmt::IfElse {
                     master: Box::new(Stmt::If {
                         main: Expr::PushLeft {
-                            expr: Box::new(Expr::Op { op: "if" })
+                            expr: Box::new(Expr::Op { kind: OpKind::If})
                         },
                         conditions: vec![
                             Expr::PushLeft {
@@ -558,7 +641,7 @@ mod tests {
                 },
                 Stmt::Expr {
                     expr: Expr::PushLeft {
-                        expr: Box::new(Expr::Op { op: "eq" }),
+                        expr: Box::new(Expr::Op { kind: OpKind::_Eq})
                     },
                 }
             ]))
@@ -576,10 +659,10 @@ mod tests {
             parser.parse(),
             Ok(program!(vec![Stmt::While {
                 main: Expr::PushLeft {
-                    expr: Box::new(Expr::Op { op: "while" }),
+                    expr: Box::new(Expr::Op { kind: OpKind::While}),
                 },
                 conditions: vec![Expr::PushLeft {
-                    expr: Box::new(Expr::Op { op: "dup" }),
+                    expr: Box::new(Expr::Op { kind: OpKind::Dup})
                 },],
                 body: Box::new(Stmt::Block {
                     stmts: vec![Stmt::Expr {
@@ -593,7 +676,7 @@ mod tests {
             // while stmt and then moving to eat the next stmt nicely!
             Stmt::Expr {
                 expr: Expr::PushLeft {
-                    expr: Box::new(Expr::Op { op: "eq" }),
+                    expr: Box::new(Expr::Op { kind: OpKind::_Eq})
                 },
             }
             ]))

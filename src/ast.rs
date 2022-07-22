@@ -3,27 +3,50 @@ use crate::lexer::Token;
 use ansi_term::Color;
 
 // --------------------------------------------------------------------------
+//                          - OpKind -
+// --------------------------------------------------------------------------
+#[derive(Debug, PartialEq, Clone)]
+pub enum OpKind {
+    _Drop,
+    Dup,
+    Let,
+    Return,
+    If,
+    While,
+    _Eq,
+    Inc,
+    Dec,
+    Print,
+    Println,
+    Plus,
+    Minus,
+    Mod,
+    GreaterThan,
+    LessThan,
+}
+
+// --------------------------------------------------------------------------
 //                          - Expr -
 // --------------------------------------------------------------------------
 #[derive(Debug, PartialEq, Clone)]
-pub enum Expr<'src> {
+pub enum Expr {
     Number { num: f32 },
-    String { text: &'src str },
+    String { text: String },
     Boolean(bool),
-    Iden { iden: &'src str },
-    Op { op: &'src str },
-    PushLeft { expr: Box<Expr<'src>> },
-    PushRight { expr: Box<Expr<'src>> },
+    Iden { iden: String },
+    Op { kind: OpKind },
+    PushLeft { expr: Box<Expr> },
+    PushRight { expr: Box<Expr> },
 }
 
-impl<'src> Display for Expr<'src> {
+impl Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Expr::Number { num } => write!(f, "{}", num),
             Expr::String { text } => write!(f, "\"{}\"", text),
             Expr::Boolean(value) => write!(f, "{}", value),
             Expr::Iden { iden } => write!(f, "{}", iden),
-            Expr::Op { op } => write!(f, "{}", op),
+            Expr::Op { kind } => write!(f, "{:?}", kind),
             Expr::PushLeft { expr } => write!(f, "PushLeft({})", expr),
             Expr::PushRight { expr } => write!(f, "PushRight({})", expr),
         }
@@ -34,44 +57,44 @@ impl<'src> Display for Expr<'src> {
 //                          - Stmt -
 // --------------------------------------------------------------------------
 #[derive(Debug, PartialEq)]
-pub enum Stmt<'src> {
-    Program { stmts: Vec<Stmt<'src>> },
-    Expr { expr: Expr<'src> },
-    Block { stmts: Vec<Stmt<'src>> },
+pub enum Stmt {
+    Program { stmts: Vec<Stmt> },
+    Expr { expr: Expr },
+    Block { stmts: Vec<Stmt> },
     If {
-        main: Expr<'src>,
-        conditions: Vec<Expr<'src>>,
-        body: Box<Stmt<'src>>,
+        main: Expr,
+        conditions: Vec<Expr>,
+        body: Box<Stmt>,
     },
     IfElse {
-        master: Box<Stmt<'src>>,
-        alternates: Vec<Stmt<'src>>,
+        master: Box<Stmt>,
+        alternates: Vec<Stmt>,
     },
     While {
-        main: Expr<'src>,
-        conditions: Vec<Expr<'src>>,
-        body: Box<Stmt<'src>>,
+        main: Expr,
+        conditions: Vec<Expr>,
+        body: Box<Stmt>,
     },
-    Let { main: Expr<'src>, token: Token<'src>, iden: &'src str },
-    Fn { main: Token<'src>, name: &'src str, args: Vec<&'src str>, body: Box<Stmt<'src>> }
+    Let { main: Expr, token: Token },
+    Fn { main: Token, args: Vec<String>, body: Box<Stmt> }
 }
 
-impl<'src> Stmt<'src> {
-    pub fn unwrap_body(&self) -> &Vec<Stmt<'src>> {
+impl Stmt {
+    pub fn unwrap_body(&self) -> &Vec<Stmt> {
         match self {
             Stmt::Block { ref stmts } => stmts,
             _ => unreachable!("unwraping body requires body!"),
         }
     }
 
-    pub fn unwrap_if(&self) -> (&Expr<'src>, &Vec<Expr<'src>>, &Box<Stmt<'src>>) {
+    pub fn unwrap_if(&self) -> (&Expr, &Vec<Expr>, &Box<Stmt>) {
         match self {
             Stmt::If { ref main, ref conditions, ref body } => (main, conditions, body),
             _ => unreachable!("should be used for unwraping if-stmt")
         }
     }
 
-    pub fn unwrap_program(&self) -> &Vec<Stmt<'src>> {
+    pub fn unwrap_program(&self) -> &Vec<Stmt> {
         match self {
             Stmt::Program { ref stmts } => stmts,
             _ => unreachable!("should be used for unwraping program")
@@ -79,7 +102,7 @@ impl<'src> Stmt<'src> {
     }
 }
 
-fn _print_ast<'src>(_stmt: &Stmt<'src>, mut indent: usize) {
+fn _print_ast(_stmt: &Stmt, mut indent: usize) {
     macro_rules! colorize_stmt {
         ($a:expr) => {
             Color::Cyan.bold().paint(stringify!($a))
@@ -162,16 +185,16 @@ fn _print_ast<'src>(_stmt: &Stmt<'src>, mut indent: usize) {
             });
             println!("{:indent$}}}", "", indent=indent);
         }
-        Stmt::Let { main, token, iden } => {
+        Stmt::Let { main, token } => {
             println!("{:indent$}{} {} {{", "", colorize_stmt!(LET_STMT), main);
             nest!({
                 println!("{:indent$}{}: {}", "", colorize_attr!(Token), token, indent=indent);
-                println!("{:indent$}{}: {}", "", colorize_attr!(Identifier), iden, indent=indent);
+                //println!("{:indent$}{}: {}", "", colorize_attr!(Identifier), iden, indent=indent);
             });
             println!("{:indent$}}}", "", indent=indent);
         }
-        Stmt::Fn { main: _, name, args, body } => {
-            println!("{:indent$}{} {} {{", "", colorize_stmt!(FUNC_DECL), name);
+        Stmt::Fn { main: _, args, body } => {
+            //println!("{:indent$}{} {} {{", "", colorize_stmt!(FUNC_DECL), name);
             nest!({
                 println!("{:indent$}{}: {:?}", "", colorize_attr!(Args), args, indent=indent);
                 _print_ast(&*body, indent);
@@ -183,7 +206,7 @@ fn _print_ast<'src>(_stmt: &Stmt<'src>, mut indent: usize) {
     };
 }
 
-pub fn print_ast<'src>(program: Stmt<'src>) {
+pub fn print_ast(program: Stmt) {
     let stmts = program.unwrap_program();
     stmts.iter().for_each(|stmt| _print_ast(stmt, 0));
 }

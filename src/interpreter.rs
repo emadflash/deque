@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use crate::env::Envirnoment;
 use crate::object::{object, Object};
 use crate::parser::Parser;
-use crate::ast::{Expr, Stmt};
+use crate::ast::*;
 
 // --------------------------------------------------------------------------
 //                          - RuntimeError -
@@ -26,7 +26,7 @@ pub struct Interpreter {
     deque: VecDeque<Object>,
 }
 
-impl<'src> Interpreter {
+impl Interpreter {
     pub fn new() -> Self {
         Self { 
             env: Envirnoment::new(),
@@ -43,15 +43,15 @@ impl<'src> Interpreter {
     #[inline] fn deque_pop_front(&mut self) -> Result<Object, RuntimeError> { self.deque.pop_front().ok_or(RuntimeError::MissingArgument) }
     #[inline] fn deque_pop_back(&mut self) -> Result<Object, RuntimeError> { self.deque.pop_back().ok_or(RuntimeError::MissingArgument) }
     
-    fn eval_expr(&mut self, expr: &Expr<'src>) -> Result<(), RuntimeError> {
+    fn eval_expr(&mut self, expr: &Expr) -> Result<(), RuntimeError> {
         match expr {
             Expr::PushLeft { expr } => match **expr {
                 ////////////////////////////////
                 // ~ Literals
                 Expr::Number { num } => self.deque.push_front(object::number!(num)),
-                Expr::String { text } => self.deque.push_front(object::string!(text.to_string())),
+                Expr::String { ref text } => self.deque.push_front(object::string!(text.to_string())),
                 Expr::Boolean(value) => self.deque.push_front(object::boolean!(value)),
-                Expr::Iden { iden } => {
+                Expr::Iden { ref iden } => {
                     if let Some(value) = self.env.get(iden.to_string()) {
                         self.deque.push_front(value);
                     } else {
@@ -61,26 +61,26 @@ impl<'src> Interpreter {
 
                 ////////////////////////////////
                 // ~ Ops/Builtins
-                Expr::Op { op } => match op {
-                    "dup" => {
+                Expr::Op { ref kind } => match kind {
+                    OpKind::Dup => {
                         self.deque.push_front(self.deque_front()?.clone());
                     }
-                    "drop" => {
+                    OpKind::_Drop => {
                         let _ = self.deque_pop_front()?;
                     }
-                    "inc" => {
+                    OpKind::Inc => {
                         let a = self.deque_front_mut()?.get_num_mut();
                         *a += 1.0;
                     }
-                    "dec" => {
+                    OpKind::Dec => {
                         let a = self.deque_front_mut()?.get_num_mut();
                         *a -= 1.0;
                     }
-                    "print" => {
+                    OpKind::Print => {
                         let dup = self.deque_pop_front()?;
                         print!("{}", dup);
                     }
-                    "println" => {
+                    OpKind::Println => {
                         let dup = self.deque_pop_front()?;
                         println!("{}", dup);
                     }
@@ -88,17 +88,17 @@ impl<'src> Interpreter {
                     // --------------------------------------------------------------------------
                     //                          - Arithmetic -
                     // --------------------------------------------------------------------------
-                    "+" => {
+                    OpKind::Plus => {
                         let a = self.deque_pop_front()?;
                         let b = self.deque_pop_front()?;
                         self.deque.push_front(object::number!(b.get_num() + a.get_num()));
                     }
-                    "-" => {
+                    OpKind::Minus => {
                         let a = self.deque_pop_front()?;
                         let b = self.deque_pop_front()?;
                         self.deque.push_front(object::number!(b.get_num() - a.get_num()));
                     }
-                    "%" => {
+                    OpKind::Mod => {
                         let a = self.deque_pop_front()?;
                         let b = self.deque_pop_front()?;
                         self.deque.push_front(object::number!(b.get_num() % a.get_num()));
@@ -107,7 +107,7 @@ impl<'src> Interpreter {
                     // --------------------------------------------------------------------------
                     //                          - Comparators -
                     // --------------------------------------------------------------------------
-                    "eq" => {
+                    OpKind::_Eq => {
                         let a = self.deque_pop_front()?;
                         let b = self.deque_pop_front()?;
 
@@ -117,7 +117,7 @@ impl<'src> Interpreter {
                             self.deque.push_front(object::boolean!(false));
                         }
                     }
-                    ">" => {
+                    OpKind::GreaterThan => {
                         let a = self.deque_pop_front()?;
                         let b = self.deque_pop_front()?;
 
@@ -127,7 +127,7 @@ impl<'src> Interpreter {
                             self.deque.push_front(object::boolean!(false));
                         }
                     }
-                    "<" => {
+                    OpKind::LessThan => {
                         let a = self.deque_pop_front()?;
                         let b = self.deque_pop_front()?;
 
@@ -143,35 +143,35 @@ impl<'src> Interpreter {
                 _ => unreachable!(),
             },
 
-            Expr::PushRight { expr } => match **expr {
+            Expr::PushRight { expr } => match &**expr {
                 ////////////////////////////////
                 // ~ Literals
-                Expr::Number { num } => self.deque.push_back(object::number!(num)),
+                Expr::Number { num } => self.deque.push_back(object::number!(*num)),
                 Expr::String { text } => self.deque.push_back(object::string!(text.to_string())),
-                Expr::Boolean(value) => self.deque.push_back(object::boolean!(value)),
+                Expr::Boolean(value) => self.deque.push_back(object::boolean!(*value)),
 
                 ////////////////////////////////
                 // ~ Ops/Builtins
-                Expr::Op { op } => match op {
-                    "dup" => {
+                Expr::Op { kind } => match kind {
+                    OpKind::Dup => {
                         self.deque.push_back(self.deque_back()?.clone());
                     }
-                    "drop" => {
+                    OpKind::_Drop => {
                         let _ = self.deque_pop_back()?;
                     }
-                    "inc" => {
+                    OpKind::Inc => {
                         let a = self.deque_back_mut()?.get_num_mut();
                         *a += 1.0;
                     }
-                    "dec" => {
+                    OpKind::Dec => {
                         let a = self.deque_back_mut()?.get_num_mut();
                         *a -= 1.0;
                     }
-                    "print" => {
+                    OpKind::Print => {
                         let dup = self.deque_pop_back()?;
                         print!("{}", dup);
                     }
-                    "println" => {
+                    OpKind::Println => {
                         let dup = self.deque_pop_back()?;
                         println!("{}", dup);
                     }
@@ -179,17 +179,17 @@ impl<'src> Interpreter {
                     // --------------------------------------------------------------------------
                     //                          - Arithmetic -
                     // --------------------------------------------------------------------------
-                    "+" => {
+                    OpKind::Plus => {
                         let a = self.deque_pop_back()?;
                         let b = self.deque_pop_back()?;
                         self.deque.push_back(object::number!(b.get_num() + a.get_num()));
                     }
-                    "-" => {
+                    OpKind::Minus => {
                         let a = self.deque_pop_back()?;
                         let b = self.deque_pop_back()?;
                         self.deque.push_back(object::number!(b.get_num() - a.get_num()));
                     }
-                    "%" => {
+                    OpKind::Mod => {
                         let a = self.deque_pop_back()?;
                         let b = self.deque_pop_back()?;
                         self.deque.push_back(object::number!(b.get_num() % a.get_num()));
@@ -198,7 +198,7 @@ impl<'src> Interpreter {
                     // --------------------------------------------------------------------------
                     //                          - Comparators -
                     // --------------------------------------------------------------------------
-                    "eq" => {
+                    OpKind::_Eq => {
                         let a = self.deque_pop_back()?;
                         let b = self.deque_pop_back()?;
 
@@ -208,7 +208,7 @@ impl<'src> Interpreter {
                             self.deque.push_front(object::boolean!(false));
                         }
                     }
-                    ">" => {
+                    OpKind::GreaterThan => {
                         let a = self.deque_pop_back()?;
                         let b = self.deque_pop_back()?;
 
@@ -218,7 +218,7 @@ impl<'src> Interpreter {
                             self.deque.push_front(object::boolean!(false));
                         }
                     }
-                    "<" => {
+                    OpKind::LessThan => {
                         let a = self.deque_pop_back()?;
                         let b = self.deque_pop_back()?;
 
@@ -241,7 +241,7 @@ impl<'src> Interpreter {
         Ok(())
     }
 
-    fn execute_block(&mut self, env: Envirnoment, block: &Stmt<'src>) -> Result<(), RuntimeError> {
+    fn execute_block(&mut self, env: Envirnoment, block: &Stmt) -> Result<(), RuntimeError> {
         let previous = self.env.clone();
         self.env = env;
         for stmt in block.unwrap_body() {
@@ -252,13 +252,13 @@ impl<'src> Interpreter {
     }
 
     #[inline]
-    fn visit_block(&mut self, block: &Stmt<'src>) -> Result<(), RuntimeError> {
+    fn visit_block(&mut self, block: &Stmt) -> Result<(), RuntimeError> {
         let env = Envirnoment::with_enclosing(self.env.clone()); 
         self.execute_block(env, block)?;
         Ok(())
     }
 
-    fn visit_if_stmt(&mut self, stmt: &Stmt<'src>) -> Result<bool, RuntimeError> {
+    fn visit_if_stmt(&mut self, stmt: &Stmt) -> Result<bool, RuntimeError> {
         let (main, conditions, body) = stmt.unwrap_if();
         let mut flag = false;
 
@@ -287,7 +287,7 @@ impl<'src> Interpreter {
         Ok(flag)
     }
 
-    fn visit_ifelse_stmt(&mut self, master: &Stmt<'src>, alternates: &Vec<Stmt<'src>>) -> Result<(), RuntimeError> {
+    fn visit_ifelse_stmt(&mut self, master: &Stmt, alternates: &Vec<Stmt>) -> Result<(), RuntimeError> {
         if !self.visit_if_stmt(master)? {
             for alternate in alternates {
                 match alternate {
@@ -306,7 +306,7 @@ impl<'src> Interpreter {
         Ok(())
     }
 
-    fn visit_while_stmt(&mut self, main: &Expr<'src>, conditions: &Vec<Expr<'src>>, body: &Box<Stmt<'src>>) -> Result<(), RuntimeError> {
+    fn visit_while_stmt(&mut self, main: &Expr, conditions: &Vec<Expr>, body: &Box<Stmt>) -> Result<(), RuntimeError> {
         loop {
             // interpret condition
             for condition in conditions {
@@ -330,7 +330,7 @@ impl<'src> Interpreter {
         Ok(())
     }
 
-    fn visit_let_stmt(&mut self, main: &Expr<'src>, iden: &'src str) -> Result<(), RuntimeError> {
+    fn visit_let_stmt(&mut self, main: &Expr) -> Result<(), RuntimeError> {
         let value;
 
         if matches!(main, Expr::PushLeft { .. }) {
@@ -339,7 +339,7 @@ impl<'src> Interpreter {
             value = self.deque_pop_back()?;
         }
 
-        self.env.define(iden.to_string(), value);
+        //self.env.define(iden.to_string(), value);
         Ok(())
     }
 
@@ -347,7 +347,7 @@ impl<'src> Interpreter {
         Ok(())
     }
 
-    fn visit_stmt(&mut self, stmt: &Stmt<'src>) -> Result<(), RuntimeError> {
+    fn visit_stmt(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
         match stmt {
             Stmt::Expr { expr } => self.eval_expr(expr)?,
             Stmt::Block { .. } => self.visit_block(stmt)?,
@@ -356,15 +356,15 @@ impl<'src> Interpreter {
             }
             Stmt::IfElse { master, alternates } => self.visit_ifelse_stmt(master, alternates)?,
             Stmt::While { main, conditions, body } => self.visit_while_stmt(main, conditions, body)?,
-            Stmt::Let { main, iden, .. } => self.visit_let_stmt(main, iden)?,
-            Stmt::Fn { main, name, args, body } => self.visit_fn_decl_stmt()?,
+            Stmt::Let { main, .. } => self.visit_let_stmt(main)?,
+            Stmt::Fn { main,  args, body } => self.visit_fn_decl_stmt()?,
             _ => unreachable!()
         }
 
         Ok(())
     }
 
-    pub fn interpret(&mut self, src: &'src str) -> anyhow::Result<()> {
+    pub fn interpret<'src>(&mut self, src: &'src str) -> anyhow::Result<()> {
         let mut parser = Parser::new(src).unwrap();
         parser
             .parse().unwrap()
