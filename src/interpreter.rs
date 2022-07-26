@@ -3,8 +3,7 @@ use std::collections::VecDeque;
 use crate::env::Envirnoment;
 use crate::object::{object, Object};
 use crate::parser::Parser;
-use crate::lexer::Token;
-use crate::ast::{Expr, Stmt};
+use crate::ast::*;
 
 // --------------------------------------------------------------------------
 //                          - RuntimeError -
@@ -16,18 +15,24 @@ pub enum RuntimeError {
 
     #[error("undefined variable: {variable:?}")]
     UndefinedVariable { variable: String },
+
+    #[error("undefined identifier/variable/object: {iden:?}")]
+    Undefined { iden: String },
+
+    #[error("invaild object type: {msg:?}")]
+    InvaildType { msg: String },
 }
 
 // --------------------------------------------------------------------------
 //                          - Interpreter -
 // --------------------------------------------------------------------------
 #[derive(Debug, Clone, PartialEq)]
-pub struct Interpreter<'a> {
-    env: Envirnoment<'a>,
-    deque: VecDeque<Object<'a>>,
+pub struct Interpreter {
+    env: Envirnoment,
+    deque: VecDeque<Object>,
 }
 
-impl<'a, 'src> Interpreter<'a> {
+impl Interpreter {
     pub fn new() -> Self {
         Self { 
             env: Envirnoment::new(),
@@ -35,82 +40,93 @@ impl<'a, 'src> Interpreter<'a> {
         }
     }
 
-    ////////////////////////////////
-    // ~ Deque Manupilation (Abstraction)
-    #[inline] fn deque_front(&self) -> Result<&Object, RuntimeError> { self.deque.front().ok_or(RuntimeError::MissingArgument) }
-    #[inline] fn deque_back(&self) -> Result<&Object, RuntimeError> { self.deque.back().ok_or(RuntimeError::MissingArgument) }
-    #[inline] fn deque_front_mut(&'a mut self) -> Result<&mut Object, RuntimeError> { self.deque.front_mut().ok_or(RuntimeError::MissingArgument) }
-    #[inline] fn deque_back_mut(&'a mut self) -> Result<&mut Object, RuntimeError> { self.deque.back_mut().ok_or(RuntimeError::MissingArgument) }
-    #[inline] fn deque_pop_front(&'a mut self) -> Result<Object, RuntimeError> { self.deque.pop_front().ok_or(RuntimeError::MissingArgument) }
-    #[inline] fn deque_pop_back(&'a mut self) -> Result<Object, RuntimeError> { self.deque.pop_back().ok_or(RuntimeError::MissingArgument) }
-    
-    fn eval_expr(&'a mut self, expr: &Expr<'src>) -> Result<(), RuntimeError> {
+    fn eval_expr(&mut self, expr: &Expr) -> Result<(), RuntimeError> {
         match expr {
             Expr::PushLeft { expr } => match **expr {
                 ////////////////////////////////
                 // ~ Literals
                 Expr::Number { num } => self.deque.push_front(object::number!(num)),
-                Expr::String { text } => self.deque.push_front(object::string!(text.to_string())),
+                Expr::String { ref text } => self.deque.push_front(object::string!(text.to_string())),
                 Expr::Boolean(value) => self.deque.push_front(object::bool!(value)),
-                Expr::Iden { iden } => {
-                    if let Some(value) = self.env.get(iden.to_string()) {
-                        self.deque.push_front(value);
+                Expr::Iden { ref iden } => {
+                    if let Some(value) = self.env.get(iden) {
+                        self.deque.push_front(value.clone());
                     } else {
                         return Err(RuntimeError::UndefinedVariable { variable: iden.to_string() });
                     }
                 },
 
+                // --------------------------------------------------------------------------
+                //                          - Function call -
+                // --------------------------------------------------------------------------
+                Expr::Call { ref name } => {
+                    if let Some(obj) = self.env.get(name) {
+                        match obj {
+                            Object::Fn { name, args, body } => {
+                                // Initialize args in local scope
+                                let mut env = Envirnoment::with_enclosing(self.env.clone());
+                                for arg in args {
+                                    let val = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
+                                    env.define(arg.to_string(), val);
+                                }
+                            }
+                            _ => return Err(RuntimeError::InvaildType { msg: "expected a callable".to_owned() })
+                        }
+                    }
+                    return Err(RuntimeError::Undefined { iden: name.to_owned() });
+                }
+
                 ////////////////////////////////
                 // ~ Ops/Builtins
-                Expr::Op { op } => match op {
-                    "dup" => {
-                        self.deque.push_front(self.deque_front()?.clone());
+                Expr::Op { ref kind } => match kind {
+                    OpKind::Dup => {
+                        self.deque.push_front(self.deque.front().ok_or(RuntimeError::MissingArgument)?.clone());
                     }
-                    "drop" => {
-                        let _ = self.deque_pop_front()?;
+                    OpKind::_Drop => {
+                        let _ = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
                     }
-                    "inc" => {
-                        let a = self.deque_front_mut()?.get_num_mut();
+                    OpKind::Inc => {
+                        let a = self.deque.front_mut().ok_or(RuntimeError::MissingArgument)?.get_num_mut();
                         *a += 1.0;
                     }
-                    "dec" => {
-                        let a = self.deque_front_mut()?.get_num_mut();
+                    OpKind::Dec => {
+                        let a = self.deque.front_mut().ok_or(RuntimeError::MissingArgument)?.get_num_mut();
                         *a -= 1.0;
                     }
-                    "print" => {
-                        let dup = self.deque_pop_front()?;
+                    OpKind::Print => {
+                        let dup = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
                         print!("{}", dup);
                     }
-                    "println" => {
-                        let dup = self.deque_pop_front()?;
+                    OpKind::Println => {
+                        let dup = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
                         println!("{}", dup);
                     }
 
                     // --------------------------------------------------------------------------
                     //                          - Arithmetic -
                     // --------------------------------------------------------------------------
-                    "+" => {
-                        let a = self.deque_pop_front()?;
-                        let b = self.deque_pop_front()?;
+                    OpKind::Plus => {
+                        let a = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
+                        let b = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
                         self.deque.push_front(object::number!(b.get_num() + a.get_num()));
                     }
-                    "-" => {
-                        let a = self.deque_pop_front()?;
-                        let b = self.deque_pop_front()?;
+                    OpKind::Minus => {
+                        let a = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
+                        let b = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
                         self.deque.push_front(object::number!(b.get_num() - a.get_num()));
                     }
-                    "%" => {
-                        let a = self.deque_pop_front()?;
-                        let b = self.deque_pop_front()?;
+                    OpKind::Mod => {
+                        let a = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
+                        let b = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
                         self.deque.push_front(object::number!(b.get_num() % a.get_num()));
                     }
 
                     // --------------------------------------------------------------------------
                     //                          - Comparators -
                     // --------------------------------------------------------------------------
-                    "eq" => {
-                        let a = self.deque_pop_front()?;
-                        let b = self.deque_pop_front()?;
+                    OpKind::_Eq => {
+                        let a = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
+                        let b = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
 
                         if a == b {
                             self.deque.push_front(object::bool!(true));
@@ -118,21 +134,21 @@ impl<'a, 'src> Interpreter<'a> {
                             self.deque.push_front(object::bool!(false));
                         }
                     }
-                    ">" => {
-                        let a = self.deque_pop_front()?;
-                        let b = self.deque_pop_front()?;
+                    OpKind::GreaterThan => {
+                        let a = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
+                        let b = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
 
-                        if a > b {
+                        if a.get_num() > b.get_num() {
                             self.deque.push_front(object::bool!(true));
                         } else {
                             self.deque.push_front(object::bool!(false));
                         }
                     }
-                    "<" => {
-                        let a = self.deque_pop_front()?;
-                        let b = self.deque_pop_front()?;
+                    OpKind::LessThan => {
+                        let a = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
+                        let b = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
 
-                        if a < b {
+                        if a.get_num() < b.get_num() {
                             self.deque.push_front(object::bool!(true));
                         } else {
                             self.deque.push_front(object::bool!(false));
@@ -144,64 +160,64 @@ impl<'a, 'src> Interpreter<'a> {
                 _ => unreachable!(),
             },
 
-            Expr::PushRight { expr } => match **expr {
+            Expr::PushRight { expr } => match &**expr {
                 ////////////////////////////////
                 // ~ Literals
-                Expr::Number { num } => self.deque.push_back(object::number!(num)),
+                Expr::Number { num } => self.deque.push_back(object::number!(*num)),
                 Expr::String { text } => self.deque.push_back(object::string!(text.to_string())),
-                Expr::Boolean(value) => self.deque.push_back(object::bool!(value)),
+                Expr::Boolean(value) => self.deque.push_back(object::bool!(*value)),
 
                 ////////////////////////////////
                 // ~ Ops/Builtins
-                Expr::Op { op } => match op {
-                    "dup" => {
-                        self.deque.push_back(self.deque_back()?.clone());
+                Expr::Op { kind } => match kind {
+                    OpKind::Dup => {
+                        self.deque.push_back(self.deque.back().ok_or(RuntimeError::MissingArgument)?.clone());
                     }
-                    "drop" => {
-                        let _ = self.deque_pop_back()?;
+                    OpKind::_Drop => {
+                        let _ = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
                     }
-                    "inc" => {
-                        let a = self.deque_back_mut()?.get_num_mut();
+                    OpKind::Inc => {
+                        let a = self.deque.back_mut().ok_or(RuntimeError::MissingArgument)?.get_num_mut();
                         *a += 1.0;
                     }
-                    "dec" => {
-                        let a = self.deque_back_mut()?.get_num_mut();
+                    OpKind::Dec => {
+                        let a = self.deque.back_mut().ok_or(RuntimeError::MissingArgument)?.get_num_mut();
                         *a -= 1.0;
                     }
-                    "print" => {
-                        let dup = self.deque_pop_back()?;
-                        print!("{}", dup);
+                    OpKind::Print => {
+                        let dup = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
+                        print!("{:?}", dup);
                     }
-                    "println" => {
-                        let dup = self.deque_pop_back()?;
-                        println!("{}", dup);
+                    OpKind::Println => {
+                        let dup = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
+                        println!("{:?}", dup);
                     }
 
                     // --------------------------------------------------------------------------
                     //                          - Arithmetic -
                     // --------------------------------------------------------------------------
-                    "+" => {
-                        let a = self.deque_pop_back()?;
-                        let b = self.deque_pop_back()?;
+                    OpKind::Plus => {
+                        let a = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
+                        let b = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
                         self.deque.push_back(object::number!(b.get_num() + a.get_num()));
                     }
-                    "-" => {
-                        let a = self.deque_pop_back()?;
-                        let b = self.deque_pop_back()?;
+                    OpKind::Minus => {
+                        let a = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
+                        let b = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
                         self.deque.push_back(object::number!(b.get_num() - a.get_num()));
                     }
-                    "%" => {
-                        let a = self.deque_pop_back()?;
-                        let b = self.deque_pop_back()?;
+                    OpKind::Mod => {
+                        let a = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
+                        let b = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
                         self.deque.push_back(object::number!(b.get_num() % a.get_num()));
                     }
 
                     // --------------------------------------------------------------------------
                     //                          - Comparators -
                     // --------------------------------------------------------------------------
-                    "eq" => {
-                        let a = self.deque_pop_back()?;
-                        let b = self.deque_pop_back()?;
+                    OpKind::_Eq => {
+                        let a = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
+                        let b = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
 
                         if a == b {
                             self.deque.push_front(object::bool!(true));
@@ -209,21 +225,21 @@ impl<'a, 'src> Interpreter<'a> {
                             self.deque.push_front(object::bool!(false));
                         }
                     }
-                    ">" => {
-                        let a = self.deque_pop_back()?;
-                        let b = self.deque_pop_back()?;
+                    OpKind::GreaterThan => {
+                        let a = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
+                        let b = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
 
-                        if a > b {
+                        if a.get_num() > b.get_num() {
                             self.deque.push_front(object::bool!(true));
                         } else {
                             self.deque.push_front(object::bool!(false));
                         }
                     }
-                    "<" => {
-                        let a = self.deque_pop_back()?;
-                        let b = self.deque_pop_back()?;
+                    OpKind::LessThan => {
+                        let a = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
+                        let b = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
 
-                        if a < b {
+                        if a.get_num() < b.get_num() {
                             self.deque.push_front(object::bool!(true));
                         } else {
                             self.deque.push_front(object::bool!(false));
@@ -236,13 +252,13 @@ impl<'a, 'src> Interpreter<'a> {
                 _ => unreachable!(),
             },
 
-            _ => todo!(),
+            _ => unreachable!(),
         };
 
         Ok(())
     }
 
-    fn execute_block(&'a mut self, env: Envirnoment<'a>, block: &Stmt<'src>) -> Result<(), RuntimeError> {
+    fn execute_block(&mut self, env: Envirnoment, block: &Stmt) -> Result<(), RuntimeError> {
         let previous = self.env.clone();
         self.env = env;
         for stmt in block.unwrap_body() {
@@ -253,13 +269,13 @@ impl<'a, 'src> Interpreter<'a> {
     }
 
     #[inline]
-    fn visit_block(&'a mut self, block: &Stmt<'src>) -> Result<(), RuntimeError> {
+    fn visit_block(&mut self, block: &Stmt) -> Result<(), RuntimeError> {
         let env = Envirnoment::with_enclosing(self.env.clone()); 
         self.execute_block(env, block)?;
         Ok(())
     }
 
-    fn visit_if_stmt(&'a mut self, stmt: &Stmt<'src>) -> Result<bool, RuntimeError> {
+    fn visit_if_stmt(&mut self, stmt: &Stmt) -> Result<bool, RuntimeError> {
         let (main, conditions, body) = stmt.unwrap_if();
         let mut flag = false;
 
@@ -268,7 +284,7 @@ impl<'a, 'src> Interpreter<'a> {
                 self.eval_expr(condition)?;
             }
 
-            if self.deque_pop_front()?.get_bool() == &true { // test
+            if self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?.get_bool() == &true { // test
                 flag = true;
             }
         } else {
@@ -276,7 +292,7 @@ impl<'a, 'src> Interpreter<'a> {
                 self.eval_expr(condition)?;
             }
 
-            if self.deque_pop_back()?.get_bool() == &true { // test
+            if self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?.get_bool() == &true { // test
                 flag = true;
             }
         }
@@ -288,7 +304,7 @@ impl<'a, 'src> Interpreter<'a> {
         Ok(flag)
     }
 
-    fn visit_ifelse_stmt(&'a mut self, master: &Stmt<'src>, alternates: &Vec<Stmt<'src>>) -> Result<(), RuntimeError> {
+    fn visit_ifelse_stmt(&mut self, master: &Stmt, alternates: &Vec<Stmt>) -> Result<(), RuntimeError> {
         if !self.visit_if_stmt(master)? {
             for alternate in alternates {
                 match alternate {
@@ -307,7 +323,7 @@ impl<'a, 'src> Interpreter<'a> {
         Ok(())
     }
 
-    fn visit_while_stmt(&'a mut self, main: &Expr<'src>, conditions: &Vec<Expr<'src>>, body: &Box<Stmt<'src>>) -> Result<(), RuntimeError> {
+    fn visit_while_stmt(&mut self, main: &Expr, conditions: &Vec<Expr>, body: &Box<Stmt>) -> Result<(), RuntimeError> {
         loop {
             // interpret condition
             for condition in conditions {
@@ -316,11 +332,11 @@ impl<'a, 'src> Interpreter<'a> {
 
             // test condition
             if matches!(main, Expr::PushLeft { .. }) {
-                if self.deque_pop_front()?.get_bool() == &false { // test
+                if self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?.get_bool() == &false { // test
                     break;
                 }
             } else {
-                if self.deque_pop_back()?.get_bool() == &false { // test
+                if self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?.get_bool() == &false { // test
                     break;
                 }
             }
@@ -331,27 +347,34 @@ impl<'a, 'src> Interpreter<'a> {
         Ok(())
     }
 
-    fn visit_let_stmt(&'a mut self, main: &Expr<'src>, iden: &'src str) -> Result<(), RuntimeError> {
+    fn visit_let_stmt(&mut self, main: &Expr, name: &String) -> Result<(), RuntimeError> {
         let value;
 
         if matches!(main, Expr::PushLeft { .. }) {
-            value = self.deque_pop_front()?;
+            value = self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?;
         } else {
-            value = self.deque_pop_back()?;
+            value = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
         }
 
-        self.env.define(iden.to_string(), value);
+        self.env.define(name.to_owned(), value);
         Ok(())
     }
 
-    fn visit_fn_decl_stmt(&'a mut self, main: &Token<'src>, name: &'src str,
-            args: &Vec<&'src str>, body: &Box<Stmt<'src>>) -> Result<(), RuntimeError> {
-        let args = args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
-        self.env.define(name.to_string(), object::function!(args.to_owned(), *body.clone()));
+    fn visit_fn_decl_stmt(&mut self, name: &String, args: &Vec<String>, body: &Box<Stmt>) -> Result<(), RuntimeError> {
+        let obj = Object::Fn {
+            name: name.to_owned(),
+            args: args.to_owned(),
+            body: body.to_owned(),
+        };
+        self.env.define(name.to_owned(), obj);
         Ok(())
     }
 
-    fn visit_stmt(&'a mut self, stmt: &Stmt<'src>) -> Result<(), RuntimeError> {
+    fn visit_fn_call(&mut self, name: &String) -> Result<(), RuntimeError> {
+        Ok(())
+    }
+
+    fn visit_stmt(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
         match stmt {
             Stmt::Expr { expr } => self.eval_expr(expr)?,
             Stmt::Block { .. } => self.visit_block(stmt)?,
@@ -360,15 +383,15 @@ impl<'a, 'src> Interpreter<'a> {
             }
             Stmt::IfElse { master, alternates } => self.visit_ifelse_stmt(master, alternates)?,
             Stmt::While { main, conditions, body } => self.visit_while_stmt(main, conditions, body)?,
-            Stmt::Let { main, iden, .. } => self.visit_let_stmt(main, iden)?,
-            Stmt::Fn { main, name, args, body } => self.visit_fn_decl_stmt(main, name, args, body)?,
+            Stmt::Let { main, name, .. } => self.visit_let_stmt(main, name)?,
+            Stmt::Fn { main: _, name, args, body } => self.visit_fn_decl_stmt(name, args, body)?,
             _ => unreachable!()
         }
 
         Ok(())
     }
 
-    pub fn interpret(&mut self, src: &'src str) -> anyhow::Result<()> {
+    pub fn interpret<'src>(&mut self, src: &'src str) -> anyhow::Result<()> {
         let mut parser = Parser::new(src).unwrap();
         parser
             .parse().unwrap()

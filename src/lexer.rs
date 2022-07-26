@@ -13,57 +13,85 @@ pub enum LexerError {
 }
 
 // --------------------------------------------------------------------------
+//                          - KwKind -
+// --------------------------------------------------------------------------
+#[derive(Debug, Clone, PartialEq)]
+pub enum KwKind {
+    _Drop,
+    Dup,
+    Let,
+    _Fn,
+    Return,
+    Print,
+    Println,
+    If,
+    Elif,
+    Else,
+    While,
+    _Eq,
+    Inc,
+    Dec
+}
+
+// --------------------------------------------------------------------------
+//                          - Punctuations -
+// --------------------------------------------------------------------------
+#[derive(Debug, Clone, PartialEq)]
+pub enum PunctuationKind {
+    Bang,
+    Colon,
+    Comma,
+    LeftParen,
+    RightParen,
+    LeftCurly,
+    RightCurly,
+
+    // Operators
+    Plus,
+    Minus,
+    Mod,
+    GreaterThan,
+    LessThan,
+}
+
+// --------------------------------------------------------------------------
 //                          - TokenKind -
 // --------------------------------------------------------------------------
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub enum TokenKind<'src> {
-    Sym { sym: &'src str },
-    Iden { iden: &'src str },
-    Keyword { kw: &'src str },
-    Number { text: &'src str, num: f32 },
-    String { text: &'src str },
+#[derive(Debug, Clone, PartialEq)]
+pub enum TokenKind {
+    Number { num: f32 },
+    String { text: String },
     Boolean(bool),
+    Iden { iden: String },
+    Keyword { kind: KwKind },
+    Punctuation { ch: char, kind: PunctuationKind},
     Eof,
 }
 
 // --------------------------------------------------------------------------
 //                          - Token -
 // --------------------------------------------------------------------------
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub struct Token<'src> {
-    pub kind: TokenKind<'src>,
+#[derive(Debug, Clone, PartialEq)]
+pub struct Token {
+    pub kind: TokenKind,
     pub pos: (usize, usize),
 }
 
-impl<'src> Token<'src> {
-    fn new(kind: TokenKind<'src>, pos: (usize, usize)) -> Self {
+impl Token {
+    fn new(kind: TokenKind, pos: (usize, usize)) -> Self {
         Self { kind, pos }
     }
 }
 
-impl<'src> TokenKind<'src> {
-    fn to_token(self, pos: (usize, usize)) -> Token<'src> {
+impl TokenKind {
+    fn to_token(self, pos: (usize, usize)) -> Token {
         Token::new(self, pos)
     }
 }
 
-impl<'src> fmt::Display for TokenKind<'src> {
+impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            TokenKind::Sym { sym } => write!(f, "Symbol({})", sym),
-            TokenKind::Iden { iden } => write!(f, "Identifier({})", iden),
-            TokenKind::Keyword { kw } => write!(f, "Keyword({})", kw),
-            TokenKind::Number { text, .. } => write!(f, "Number({})", text),
-            TokenKind::String { text } => write!(f, "String({})", text),
-            TokenKind::Boolean(val) => write!(f, "Bool({})", val),
-            TokenKind::Eof => write!(f, "END_OF_FILE"),
-        }
-    }
-}
-
-impl<'src> fmt::Display for Token<'src> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {}, {}: {:?}", Color::Cyan.bold().paint("KIND"), self.kind,
+        write!(f, "{}: {:?}, {}: {:?}", Color::Cyan.bold().paint("KIND"), self.kind,
             Color::Cyan.bold().paint("POS"), self.pos)
     }
 }
@@ -91,8 +119,18 @@ impl<'src> Lexer<'src> {
             chars
         }
     }
+                
+    fn mk_punc(&mut self, ch: char, kind: PunctuationKind) -> Result<Token, LexerError> {
+        let tok = TokenKind::Punctuation {
+            ch,
+            kind
+        }
+        .to_token((self.row, self.col));
+        self.col += 1;
+        return Ok(tok);
+    }
 
-    pub fn next_token(&mut self) -> Result<Token<'src>, LexerError> {
+    pub fn next_token(&mut self) -> Result<Token, LexerError> {
         assert!(!self.is_finished, "Lexer has already finished!");
 
         while let Some((index, ch)) = self.chars.next() {
@@ -125,12 +163,7 @@ impl<'src> Lexer<'src> {
                             self.chars.next();
                         }
                     } else {
-                        // --------------------------------------------------------------------------
-                        //                          - Minus -
-                        // --------------------------------------------------------------------------
-                        let tok = TokenKind::Sym {sym: &self.src[index..index + 1]}.to_token((self.row, self.col));
-                        self.col += 1;
-                        return Ok(tok);
+                        return self.mk_punc(ch, PunctuationKind::Minus);
                     }
                 }
 
@@ -170,7 +203,7 @@ impl<'src> Lexer<'src> {
                         return Err(LexerError::MissingEndOfStringQuote);
                     }
 
-                    let tok = TokenKind::String { text: &self.src[index..end] }.to_token((self.row, self.col));
+                    let tok = TokenKind::String { text: self.src[index..end].to_string() }.to_token((self.row, self.col));
                     self.col += end - index + 2;
                     return Ok(tok);
                 }
@@ -195,22 +228,25 @@ impl<'src> Lexer<'src> {
                     let text = &self.src[index..=end];
                     let num = text.parse::<f32>().unwrap();
 
-                    let tok = TokenKind::Number { text, num }.to_token((self.row, self.col));
+                    let tok = TokenKind::Number { num }.to_token((self.row, self.col));
                     self.col += end - index + 1;
                     return Ok(tok);
                 }
 
                 // --------------------------------------------------------------------------
-                //                          - Sym -
+                //                          - Punctuation -
                 // --------------------------------------------------------------------------
-                '!' | ',' | ':' | '{' | '}' | '(' | ')' | '+' | '%' | '>' | '<' => {
-                    let tok = TokenKind::Sym {
-                        sym: &self.src[index..index + 1],
-                    }
-                    .to_token((self.row, self.col));
-                    self.col += 1;
-                    return Ok(tok);
-                }
+                '!' => return self.mk_punc(ch, PunctuationKind::Bang),
+                ',' => return self.mk_punc(ch, PunctuationKind::Comma),
+                ':' => return self.mk_punc(ch, PunctuationKind::Colon),
+                '{' => return self.mk_punc(ch, PunctuationKind::LeftCurly),
+                '}' => return self.mk_punc(ch, PunctuationKind::RightCurly),
+                '(' => return self.mk_punc(ch, PunctuationKind::LeftParen),
+                ')' => return self.mk_punc(ch, PunctuationKind::RightParen),
+                '+' => return self.mk_punc(ch, PunctuationKind::Plus),
+                '%' => return self.mk_punc(ch, PunctuationKind::Mod),
+                '>' => return self.mk_punc(ch, PunctuationKind::GreaterThan),
+                '<' => return self.mk_punc(ch, PunctuationKind::LessThan),
 
                 // --------------------------------------------------------------------------
                 //                          - Iden or Keyword -
@@ -231,30 +267,42 @@ impl<'src> Lexer<'src> {
 
                     let text = &self.src[index..=end];
                     let tok = match text {
-                        "dup" | "drop" | "let" | "fn" | "return" | "print" | "println" | "if" | "elif" | "else" | "while"
-                        | "eq" | "inc" | "dec" => TokenKind::Keyword { kw: text }.to_token((self.row, self.col)),
+                        "dup" => TokenKind::Keyword { kind: KwKind::Dup },
+                        "drop" =>TokenKind::Keyword { kind: KwKind::_Drop }, 
+                        "let" =>TokenKind::Keyword { kind: KwKind::Let }, 
+                        "fn" =>TokenKind::Keyword { kind: KwKind::_Fn }, 
+                        "return" =>TokenKind::Keyword { kind: KwKind::Return }, 
+                        "print" =>TokenKind::Keyword { kind: KwKind::Print }, 
+                        "println" =>TokenKind::Keyword { kind: KwKind::Println }, 
+                        "if" =>TokenKind::Keyword { kind: KwKind::If }, 
+                        "elif" =>TokenKind::Keyword { kind: KwKind::Elif }, 
+                        "else" =>TokenKind::Keyword { kind: KwKind::Else }, 
+                        "while" =>TokenKind::Keyword { kind: KwKind::While }, 
+                        "eq" =>TokenKind::Keyword { kind: KwKind::_Eq }, 
+                        "inc" =>TokenKind::Keyword { kind: KwKind::Inc}, 
+                        "dec" =>TokenKind::Keyword { kind: KwKind::Dec }, 
 
-                        "true" => TokenKind::Boolean(true).to_token((self.row, self.col)),
-                        "false" => TokenKind::Boolean(false).to_token((self.row, self.col)),
-                        _ => TokenKind::Iden { iden: text }.to_token((self.row, self.col))
+                        "true" => TokenKind::Boolean(true),
+                        "false" => TokenKind::Boolean(false),
+                        _ => TokenKind::Iden { iden: text.to_string() }
                     };
 
                     self.col += end - index;
-                    return Ok(tok);
+                    return Ok(tok.to_token((self.row, self.col)));
                 }
 
                 _ => return Err(LexerError::UnknowCharacter { ch }),
             };
             self.col += 1;
-        }
+        };
 
         self.is_finished = true;
         Ok(TokenKind::Eof.to_token((self.row, self.col)))
     }
 }
 
-impl<'src> Iterator for Lexer<'src> {
-    type Item = Result<Token<'src>, LexerError>;
+impl<'a> Iterator for Lexer<'a> {
+    type Item = Result<Token, LexerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.is_finished {
@@ -292,14 +340,14 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenKind::Sym { sym: "!" }, (0, 0)),
-                Token::new(TokenKind::Sym { sym: "+" }, (0, 1)),
-                Token::new(TokenKind::Sym { sym: "!" }, (0, 3)),
-                Token::new(TokenKind::Sym { sym: "-" }, (0, 4)),
-                Token::new(TokenKind::Sym { sym: "!" }, (0, 6)),
-                Token::new(TokenKind::Number { text: "2", num: 2.0 }, (0, 7)),
-                Token::new(TokenKind::Sym { sym: ">" }, (0, 9)),
-                Token::new(TokenKind::Sym { sym: "!" }, (0, 10)),
+                Token::new(TokenKind::Punctuation { ch: '!', kind: PunctuationKind::Bang }, (0, 0)),
+                Token::new(TokenKind::Punctuation { ch: '+', kind: PunctuationKind::Plus }, (0, 1)),
+                Token::new(TokenKind::Punctuation { ch: '!', kind: PunctuationKind::Bang }, (0, 3)),
+                Token::new(TokenKind::Punctuation { ch: '-', kind: PunctuationKind::Minus }, (0, 4)),
+                Token::new(TokenKind::Punctuation { ch: '!', kind: PunctuationKind::Bang }, (0, 6)),
+                Token::new(TokenKind::Number { num: 2.0 }, (0, 7)),
+                Token::new(TokenKind::Punctuation { ch: '>', kind: PunctuationKind::GreaterThan }, (0, 9)),
+                Token::new(TokenKind::Punctuation { ch: '!', kind: PunctuationKind::Bang }, (0, 10)),
                 Token::new(TokenKind::Eof, (0, 11))
             ]
         );
@@ -312,9 +360,9 @@ mod tests {
         assert_eq!(
             tokens,
             vec![
-                Token::new(TokenKind::String { text: "string 1" }, (0, 0)),
-                Token::new(TokenKind::String { text: "string 2" }, (0, 13)),
-                Token::new(TokenKind::Number { text: "69", num: 69.0 }, (0, 24)),
+                Token::new(TokenKind::String { text: "string 1".to_string() }, (0, 0)),
+                Token::new(TokenKind::String { text: "string 2".to_string() }, (0, 13)),
+                Token::new(TokenKind::Number { num: 69.0 }, (0, 24)),
                 Token::new(TokenKind::Eof, (0, 26))
             ]
         );

@@ -19,30 +19,49 @@ pub mod object {
             Object::Bool { value: $a }
         }
     }
-    macro_rules! function {
-        ($b: expr, $c: expr) => {
-            Object::Function { args: $b, body: $c }
+    macro_rules! proc {
+        ($a:expr) => {
+            Object::Bool { value: $a }
         }
     }
 
     pub(crate) use number;
     pub(crate) use string;
     pub(crate) use bool;
-    pub(crate) use function;
+    pub(crate) use proc;
+}
+
+// --------------------------------------------------------------------------
+//                          - FunctionKind -
+// --------------------------------------------------------------------------
+enum FunctionKind {
+    Normal,
+    Lambda
 }
 
 // --------------------------------------------------------------------------
 //                          - Object -
 // --------------------------------------------------------------------------
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
-pub enum Object<'src> {
+#[derive(Debug, PartialEq, Clone)]
+pub enum Object {
     Number { num: f32 },
     String { text: String },
     Bool { value: bool },
-    Function { args: Vec<String>, body: Stmt<'src> },
+    Fn { name: String, args: Vec<String>, body: Box<Stmt> },
 }
 
-impl<'src> Object<'src> {
+impl Display for Object {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Object::Number { num } => write!(f, "{}", num),
+            Object::String { text } => write!(f, "{}", text),
+            Object::Bool { value } => write!(f, "{}", value),
+            Object::Fn { name, .. } => write!(f, "#<{}>", name),
+        }
+    }
+}
+
+impl Object {
     pub fn get_num(&self) -> &f32 {
         match self {
             Object::Number { num } => &num,
@@ -82,17 +101,6 @@ impl<'src> Object<'src> {
         match self {
             Object::Bool { ref mut value } => value,
             _ => unreachable!(),
-        }
-    }
-}
-
-impl<'src> Display for Object<'src> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Object::Number { num } => write!(f, "{}", num),
-            Object::String { text } => write!(f, "{}", text),
-            Object::Bool { value } => write!(f, "{}", value),
-            Object::Function { args, body } => write!(f, "args: {:?}, body: {}", args, body),
         }
     }
 }
