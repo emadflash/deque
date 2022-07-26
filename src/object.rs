@@ -1,4 +1,5 @@
 use std::{fmt, fmt::Display};
+use crate::ast::*;
 
 ////////////////////////////////
 // ~ Helper macros
@@ -18,7 +19,7 @@ pub mod object {
             Object::Boolean { value: $a }
         }
     }
-    macro_rules! procedure {
+    macro_rules! proc {
         ($a:expr) => {
             Object::Boolean { value: $a }
         }
@@ -27,17 +28,37 @@ pub mod object {
     pub(crate) use number;
     pub(crate) use string;
     pub(crate) use boolean;
-    pub(crate) use procedure;
+    pub(crate) use proc;
+}
+
+// --------------------------------------------------------------------------
+//                          - FunctionKind -
+// --------------------------------------------------------------------------
+enum FunctionKind {
+    Normal,
+    Lambda
 }
 
 // --------------------------------------------------------------------------
 //                          - Object -
 // --------------------------------------------------------------------------
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Object {
     Number { num: f32 },
     String { text: String },
     Boolean { value: bool },
+    Fn { name: String, args: Vec<String>, body: Box<Stmt> },
+}
+
+impl Display for Object {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Object::Number { num } => write!(f, "{}", num),
+            Object::String { text } => write!(f, "{}", text),
+            Object::Boolean { value } => write!(f, "{}", value),
+            Object::Fn { name, .. } => write!(f, "#<{}>", name),
+        }
+    }
 }
 
 impl Object {
@@ -80,16 +101,6 @@ impl Object {
         match self {
             Object::Boolean { ref mut value } => value,
             _ => unreachable!(),
-        }
-    }
-}
-
-impl Display for Object {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Object::Number { num } => write!(f, "{}", num),
-            Object::String { text } => write!(f, "{}", text),
-            Object::Boolean { value } => write!(f, "{}", value),
         }
     }
 }

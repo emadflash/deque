@@ -31,9 +31,9 @@ impl<'a> Envirnoment {
         }
     }
 
-    pub fn get(&self, variable: String) -> Option<Object> {
-        match self.variables.get(&variable) {
-            Some(value) => Some(value.clone()),
+    pub fn get(&self, variable: &String) -> Option<&Object> {
+        match self.variables.get(variable) {
+            Some(value) => Some(value),
             None => {
                 if let Some(enclosing) = &self.enclosing {
                     return enclosing.get(variable);

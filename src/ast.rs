@@ -35,6 +35,7 @@ pub enum Expr {
     Boolean(bool),
     Iden { iden: String },
     Op { kind: OpKind },
+    Call { name: String },
     PushLeft { expr: Box<Expr> },
     PushRight { expr: Box<Expr> },
 }
@@ -47,6 +48,7 @@ impl Display for Expr {
             Expr::Boolean(value) => write!(f, "{}", value),
             Expr::Iden { iden } => write!(f, "{}", iden),
             Expr::Op { kind } => write!(f, "{:?}", kind),
+            Expr::Call { name } => write!(f, "Call({})", name),
             Expr::PushLeft { expr } => write!(f, "PushLeft({})", expr),
             Expr::PushRight { expr } => write!(f, "PushRight({})", expr),
         }
@@ -56,7 +58,7 @@ impl Display for Expr {
 // --------------------------------------------------------------------------
 //                          - Stmt -
 // --------------------------------------------------------------------------
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Stmt {
     Program { stmts: Vec<Stmt> },
     Expr { expr: Expr },
@@ -75,8 +77,9 @@ pub enum Stmt {
         conditions: Vec<Expr>,
         body: Box<Stmt>,
     },
-    Let { main: Expr, token: Token },
-    Fn { main: Token, args: Vec<String>, body: Box<Stmt> }
+    Let { main: Expr, name: String, token: Token },
+    Fn { main: Token, name: String, args: Vec<String>, body: Box<Stmt> },
+    Call { name: String },
 }
 
 impl Stmt {
@@ -185,16 +188,16 @@ fn _print_ast(_stmt: &Stmt, mut indent: usize) {
             });
             println!("{:indent$}}}", "", indent=indent);
         }
-        Stmt::Let { main, token } => {
+        Stmt::Let { main, name, token } => {
             println!("{:indent$}{} {} {{", "", colorize_stmt!(LET_STMT), main);
             nest!({
+                println!("{:indent$}{}: {}", "", colorize_attr!(Identifier), name, indent=indent);
                 println!("{:indent$}{}: {}", "", colorize_attr!(Token), token, indent=indent);
-                //println!("{:indent$}{}: {}", "", colorize_attr!(Identifier), iden, indent=indent);
             });
             println!("{:indent$}}}", "", indent=indent);
         }
-        Stmt::Fn { main: _, args, body } => {
-            //println!("{:indent$}{} {} {{", "", colorize_stmt!(FUNC_DECL), name);
+        Stmt::Fn { main: _, name, args, body } => {
+            println!("{:indent$}{} {} {{", "", colorize_stmt!(FUNC_DECL), name);
             nest!({
                 println!("{:indent$}{}: {:?}", "", colorize_attr!(Args), args, indent=indent);
                 _print_ast(&*body, indent);

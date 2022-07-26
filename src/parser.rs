@@ -19,6 +19,15 @@ pub enum ParseError {
         expected: TokenKind,
         found: TokenKind,
     },
+
+    #[error("Invaild token kind (expected: {expected:?}, found: {found:?}")]
+    InvaildTokenKind2 {
+        expected: String,
+        found: TokenKind,
+    },
+
+    #[error("Invaild stmt: {msg:?}")]
+    InvaildStmt { msg: String }
 }
 
 impl From<&LexerError> for ParseError {
@@ -89,9 +98,18 @@ impl<'a, 'src> Parser<'a> {
                         expr: Box::new(Expr::Boolean(value)),
                     }),
 
-                    TokenKind::Iden { iden } => Ok(Expr::PushLeft {
-                        expr: Box::new(Expr::Iden { iden })
-                    }),
+                    TokenKind::Iden { iden } => {
+                        if self.match_next_token(TokenKind::Punctuation { kind: PunctuationKind::LeftParen, ch: '(' }) {
+                            self.lexer.next();
+                            self.expect(TokenKind::Punctuation { kind: PunctuationKind::RightParen, ch: ')' })?;
+                            return Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Call { name: iden })
+                            })
+                        }
+                        Ok(Expr::PushLeft {
+                            expr: Box::new(Expr::Iden { iden })
+                        })
+                    }
 
                     TokenKind::Keyword { kind } => match &kind {
                         KwKind::Dup => Ok(Expr::PushLeft {
@@ -243,6 +261,15 @@ impl<'a, 'src> Parser<'a> {
             },
 
             TokenKind::Iden { iden } => {
+                if self.match_next_token(TokenKind::Punctuation { kind: PunctuationKind::LeftParen, ch: '(' }) {
+                    self.lexer.next();
+                    self.expect(TokenKind::Punctuation { kind: PunctuationKind::RightParen, ch: ')' })?;
+                    self.expect(TokenKind::Punctuation { kind: PunctuationKind::Bang, ch: '!' })?;
+                    return Ok(Expr::PushRight {
+                        expr: Box::new(Expr::Call { name: iden })
+                    })
+                }
+
                 self.expect(TokenKind::Punctuation { kind: PunctuationKind::Bang, ch: '!' })?;
                 Ok(Expr::PushRight {
                     expr: Box::new(Expr::Iden { iden })
@@ -286,7 +313,7 @@ impl<'a, 'src> Parser<'a> {
         }
 
         if conditions.is_empty() {
-            panic!("expected conditions in if stmt");
+            return Err(ParseError::InvaildStmt { msg: "missing condition in if stmt".to_owned() });
         }
 
         Ok(Stmt::If { main, conditions, body: Box::new(self.parse_block()?) })
@@ -333,15 +360,16 @@ impl<'a, 'src> Parser<'a> {
         if let Some(tok) = self.lexer.next() {
             let tok = tok?;
             match tok.kind {
-                TokenKind::Iden { .. } => return Ok(Stmt::Let {
+                TokenKind::Iden { ref iden } => return Ok(Stmt::Let {
+                    name: iden.to_string(),
                     main,
                     token: tok.clone(),
                 }),
-                _ => panic!("expected a identifier"),
+                _ => return Err(ParseError::InvaildTokenKind2 { expected: "'variable name' after let".to_owned(), found: tok.kind.clone()})
             }
         }
 
-        panic!()
+        Err(ParseError::InvaildStmt { msg: "missing variable name after let stmt".to_owned() })
     }
 
     fn parse_fn_args(&mut self) -> anyhow::Result<Vec<String>, ParseError> {
@@ -353,9 +381,10 @@ impl<'a, 'src> Parser<'a> {
         }
 
         let tok = self.lexer.next().unwrap();
-        match tok?.kind {
+        let tok = tok?;
+        match tok.kind {
             TokenKind::Iden { iden } => args.push(iden),
-            _ => panic!("expected an identifier: {:?}", args),
+            _ => return Err(ParseError::InvaildTokenKind2 { expected: "function name".to_owned(), found: tok.kind.clone()})
         }
 
         while let Some(tok) = self.lexer.peek() {
@@ -366,11 +395,12 @@ impl<'a, 'src> Parser<'a> {
             }
 
             let __tok = self.lexer.next().unwrap();
-            match __tok?.kind {
+            let __tok = __tok?;
+            match __tok.kind {
                 TokenKind::Iden { iden } => {
                     args.push(iden);
                 },
-                _ => panic!("expected an identifier"),
+                _ => return Err(ParseError::InvaildTokenKind2 { expected: "function parameter".to_owned(), found: __tok.kind.clone() })
             }
         }
 
@@ -383,16 +413,17 @@ impl<'a, 'src> Parser<'a> {
         if let Some(tok) = self.lexer.next() {
             let tok = tok?;
             match tok.kind {
-                TokenKind::Iden { .. } => {
+                TokenKind::Iden { ref iden } => {
                     return Ok(Stmt::Fn {
+                        name: iden.to_string(),
                         main: tok,
                         args: self.parse_fn_args()?,
                         body: Box::new(self.parse_block()?) })
                 }
-                _ => panic!("Expected function name"),
+                _ => return Err(ParseError::InvaildStmt { msg: " function name".to_owned() }),
             }
         }
-        panic!("Expected function name");
+        Err(ParseError::InvaildStmt { msg: "Expected function name".to_owned() })
     }
 
     fn parse_stmt(&mut self) -> anyhow::Result<Stmt, ParseError> {

@@ -44,15 +44,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map(|input| fs::read_to_string(input))
         .collect::<Result<Vec<_>, _>>()?;
 
+    let mut should_interpret_source_file = true;
     if is_print_ast {
         let mut parser = Parser::new(&source_files[0]).unwrap();
         let ast = parser.parse().unwrap();
         print_ast(ast);
+        should_interpret_source_file = false;
     }
-
     if is_lex {
         print_lexical_analysis(&source_files[0]);
-    } else {
+        should_interpret_source_file = false;
+    }
+
+    if should_interpret_source_file {
         let mut interpreter = Interpreter::new();
         interpreter.interpret(&source_files[0])?;
     }
