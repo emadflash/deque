@@ -94,8 +94,8 @@ impl<'a, 'src> Parser<'a> {
                         expr: Box::new(Expr::String { text }),
                     }),
 
-                    TokenKind::Boolean(value) => Ok(Expr::PushLeft {
-                        expr: Box::new(Expr::Boolean(value)),
+                    TokenKind::Bool(value) => Ok(Expr::PushLeft {
+                        expr: Box::new(Expr::Bool(value)),
                     }),
 
                     TokenKind::Iden { iden } => {
@@ -253,10 +253,10 @@ impl<'a, 'src> Parser<'a> {
                 })
             }
 
-            TokenKind::Boolean(value) => {
+            TokenKind::Bool(value) => {
                 self.expect(TokenKind::Punctuation { kind: PunctuationKind::Bang, ch: '!' })?;
                 Ok(Expr::PushRight {
-                    expr: Box::new(Expr::Boolean(value)),
+                    expr: Box::new(Expr::Bool(value)),
                 })
             },
 

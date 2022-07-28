@@ -47,7 +47,7 @@ pub enum OpKind {
 pub enum Expr {
     Number { num: f32 },
     String { text: String },
-    Boolean(bool),
+    Bool(bool),
     Iden { iden: String },
     Op { kind: OpKind },
     Call { name: String },
@@ -60,7 +60,7 @@ impl Display for Expr {
         match self {
             Expr::Number { num } => write!(f, "{}", num),
             Expr::String { text } => write!(f, "\"{}\"", text),
-            Expr::Boolean(value) => write!(f, "{}", value),
+            Expr::Bool(value) => write!(f, "{}", value),
             Expr::Iden { iden } => write!(f, "{}", iden),
             Expr::Op { kind } => write!(f, "{:?}", kind),
             Expr::Call { name } => write!(f, "Call({})", name),

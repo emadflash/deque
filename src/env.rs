@@ -4,7 +4,7 @@ use crate::object::Object;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Envirnoment {
     pub variables: HashMap<String, Object>,
-    enclosing: Option<Box<Envirnoment>>,
+    pub enclosing: Option<Box<Envirnoment>>,
 }
 
 impl Envirnoment {
@@ -22,21 +22,33 @@ impl Envirnoment {
         }
     }
 
-    pub fn define(&mut self, target: String, value: Object) {
-        if self.variables.contains_key(&target) {
-            let __value = self.variables.get_mut(&target).unwrap();
-            *__value = value;
-        } else {
-            self.variables.insert(target, value);
+    pub fn define(&mut self, lhs: String, rhs: Object) {
+        match self.get_mut(&lhs) {
+            Some(val) => *val = rhs,
+            None => {
+                assert_eq!(self.variables.insert(lhs.to_string(), rhs), None);
+            }
+        };
+    }
+
+    pub fn get_mut(&mut self, lhs: &String) -> Option<&mut Object> {
+        match self.variables.get_mut(lhs) {
+            Some(value) => Some(value),
+            None => {
+                if let Some(enclosing) = &mut self.enclosing {
+                    return enclosing.get_mut(lhs);
+                }
+                None
+            },
         }
     }
 
-    pub fn get(&self, variable: &String) -> Option<&Object> {
-        match self.variables.get(variable) {
+    pub fn get(&self, lhs: &String) -> Option<&Object> {
+        match self.variables.get(lhs) {
             Some(value) => Some(value),
             None => {
                 if let Some(enclosing) = &self.enclosing {
-                    return enclosing.get(variable);
+                    return enclosing.get(lhs);
                 }
                 None
             },

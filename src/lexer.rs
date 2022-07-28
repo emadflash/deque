@@ -61,7 +61,7 @@ pub enum PunctuationKind {
 pub enum TokenKind {
     Number { num: f32 },
     String { text: String },
-    Boolean(bool),
+    Bool(bool),
     Iden { iden: String },
     Keyword { kind: KwKind },
     Punctuation { ch: char, kind: PunctuationKind},
@@ -282,8 +282,8 @@ impl<'src> Lexer<'src> {
                         "inc" =>TokenKind::Keyword { kind: KwKind::Inc}, 
                         "dec" =>TokenKind::Keyword { kind: KwKind::Dec }, 
 
-                        "true" => TokenKind::Boolean(true),
-                        "false" => TokenKind::Boolean(false),
+                        "true" => TokenKind::Bool(true),
+                        "false" => TokenKind::Bool(false),
                         _ => TokenKind::Iden { iden: text.to_string() }
                     };
 

@@ -1,8 +1,6 @@
 use std::{fmt, fmt::Display};
 use crate::ast::Stmt;
 
-////////////////////////////////
-// ~ Helper macros
 pub mod object {
     macro_rules! number {
         ($a:expr) => {

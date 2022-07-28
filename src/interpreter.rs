@@ -47,7 +47,7 @@ impl Interpreter {
                 // ~ Literals
                 Expr::Number { num } => self.deque.push_front(object::number!(num)),
                 Expr::String { ref text } => self.deque.push_front(object::string!(text.to_string())),
-                Expr::Boolean(value) => self.deque.push_front(object::bool!(value)),
+                Expr::Bool(value) => self.deque.push_front(object::bool!(value)),
                 Expr::Iden { ref iden } => {
                     if let Some(value) = self.env.get(iden) {
                         self.deque.push_front(value.clone());
@@ -60,6 +60,8 @@ impl Interpreter {
                 //                          - Function call -
                 // --------------------------------------------------------------------------
                 Expr::Call { ref name } => {
+                    todo!("implement callable");
+
                     if let Some(obj) = self.env.get(name) {
                         match obj {
                             Object::Fn { name, args, body } => {
@@ -165,7 +167,7 @@ impl Interpreter {
                 // ~ Literals
                 Expr::Number { num } => self.deque.push_back(object::number!(*num)),
                 Expr::String { text } => self.deque.push_back(object::string!(text.to_string())),
-                Expr::Boolean(value) => self.deque.push_back(object::bool!(*value)),
+                Expr::Bool(value) => self.deque.push_back(object::bool!(*value)),
 
                 ////////////////////////////////
                 // ~ Ops/Builtins
@@ -259,12 +261,15 @@ impl Interpreter {
     }
 
     fn execute_block(&mut self, env: Envirnoment, block: &Stmt) -> Result<(), RuntimeError> {
-        let previous = self.env.clone();
+        // TODO(madflash) - See if we could get rid of env clone
+        // And just keep a reference to parent env
+
         self.env = env;
         for stmt in block.unwrap_body() {
             self.visit_stmt(stmt)?;
         }
-        self.env = previous;
+        let prev = self.env.enclosing.as_ref().unwrap();
+        self.env = *prev.clone();
         Ok(())
     }
 
@@ -284,7 +289,7 @@ impl Interpreter {
                 self.eval_expr(condition)?;
             }
 
-            if self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?.get_bool() == &true { // test
+            if self.deque.pop_front().ok_or(RuntimeError::MissingArgument)?.get_bool() == &true {
                 flag = true;
             }
         } else {
@@ -292,7 +297,7 @@ impl Interpreter {
                 self.eval_expr(condition)?;
             }
 
-            if self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?.get_bool() == &true { // test
+            if self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?.get_bool() == &true {
                 flag = true;
             }
         }
@@ -356,7 +361,7 @@ impl Interpreter {
             value = self.deque.pop_back().ok_or(RuntimeError::MissingArgument)?;
         }
 
-        self.env.define(name.to_owned(), value);
+        self.env.define(name.to_string(), value);
         Ok(())
     }
 
@@ -366,7 +371,7 @@ impl Interpreter {
             args: args.to_owned(),
             body: body.to_owned(),
         };
-        self.env.define(name.to_owned(), obj);
+        self.env.define(name.to_string(), obj);
         Ok(())
     }
 
