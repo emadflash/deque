@@ -398,10 +398,8 @@ impl Interpreter {
 
     pub fn interpret<'src>(&mut self, src: &'src str) -> anyhow::Result<()> {
         let mut parser = Parser::new(src).unwrap();
-        parser
-            .parse().unwrap()
-            .unwrap_program()
-            .iter().map(|stmt| self.visit_stmt(stmt)).collect::<Result<Vec<_>, _>>()?;
+        let program = parser.parse().unwrap();
+        program.stmts.iter().map(|stmt| self.visit_stmt(stmt)).collect::<Result<Vec<_>, _>>()?;
         Ok(())
     }
 }

@@ -75,7 +75,6 @@ impl Display for Expr {
 // --------------------------------------------------------------------------
 #[derive(Debug, PartialEq, Clone)]
 pub enum Stmt {
-    Program { stmts: Vec<Stmt> },
     Expr { expr: Expr },
     Block { stmts: Vec<Stmt> },
     If {
@@ -111,108 +110,114 @@ impl Stmt {
             _ => unreachable!("should be used for unwraping if-stmt")
         }
     }
-
-    pub fn unwrap_program(&self) -> &Vec<Stmt> {
-        match self {
-            Stmt::Program { ref stmts } => stmts,
-            _ => unreachable!("should be used for unwraping program")
-        }
-    }
 }
 
-fn _print_ast(_stmt: &Stmt, mut indent: usize) {
-    macro_rules! nest {
-        ($a:block) => {
-            indent += 4;
-            $a;
-            indent -= 4;
+
+// --------------------------------------------------------------------------
+//                          - Program -
+// --------------------------------------------------------------------------
+#[derive(Debug, PartialEq)]
+pub struct Program { pub stmts: Vec<Stmt> }
+impl Program {
+    pub fn new(stmts: Vec<Stmt>) -> Self {
+        Self {
+            stmts
         }
     }
 
-    match _stmt {
-        Stmt::Expr { expr } => println!("{:indent$}{}", "", expr, indent = indent),
-        Stmt::Block { stmts } => {
-            println!("{:indent$}{} {{", "", colorize_stmt!(BLOCK), indent=indent);
-            nest!({
-                for stmt in stmts {
-                    _print_ast(stmt, indent);
-                }
-            });
-            println!("{:indent$}}}", "", indent=indent);
+    pub fn print_ast(&self) {
+        self.stmts.iter().for_each(|stmt| Program::print_stmt_with_lvl(stmt, 0));
+    }
+
+    fn print_stmt_with_lvl(stmt: &Stmt, mut indent_lvl: usize) {
+        macro_rules! nest {
+            ($a:block) => {
+                indent_lvl += 4;
+                $a;
+                indent_lvl -= 4;
+            }
         }
-        Stmt::If { main, conditions, body } => {
-            println!("{:indent$}{} {} {{", "", colorize_stmt!(IF_STMT), main, indent=indent);
-            nest!({
-                println!("{:indent$}{} {{", "", colorize_attr!(Conditions), indent=indent);
+
+        match stmt {
+            Stmt::Expr { expr } => println!("{:indent_lvl$}{}", "", expr, indent_lvl = indent_lvl),
+            Stmt::Block { stmts } => {
+                println!("{:indent_lvl$}{} {{", "", colorize_stmt!(BLOCK), indent_lvl=indent_lvl);
                 nest!({
-                    for condition in conditions {
-                        println!("{:indent$}{}", "", condition, indent=indent);
+                    for stmt in stmts {
+                        Program::print_stmt_with_lvl(stmt, indent_lvl);
                     }
                 });
-                println!("{:indent$}}}", "", indent=indent);
-                _print_ast(&*body, indent);
-            });
-            println!("{:indent$}}}", "", indent=indent);
-        }
-        Stmt::IfElse { master, alternates } => {
-            println!("{:indent$}{} {{", "", colorize_stmt!(IF_ELSE_STMT), indent=indent);
-            nest!({
-                println!("{:indent$}{} {{", "", colorize_attr!(Master), indent=indent);
-
+                println!("{:indent_lvl$}}}", "", indent_lvl=indent_lvl);
+            }
+            Stmt::If { main, conditions, body } => {
+                println!("{:indent_lvl$}{} {} {{", "", colorize_stmt!(IF_STMT), main, indent_lvl=indent_lvl);
                 nest!({
-                    _print_ast(&*master, indent);
+                    println!("{:indent_lvl$}{} {{", "", colorize_attr!(Conditions), indent_lvl=indent_lvl);
+                    nest!({
+                        for condition in conditions {
+                            println!("{:indent_lvl$}{}", "", condition, indent_lvl=indent_lvl);
+                        }
+                    });
+                    println!("{:indent_lvl$}}}", "", indent_lvl=indent_lvl);
+                    Program::print_stmt_with_lvl(&*body, indent_lvl);
+                });
+                println!("{:indent_lvl$}}}", "", indent_lvl=indent_lvl);
+            }
+            Stmt::IfElse { master, alternates } => {
+                println!("{:indent_lvl$}{} {{", "", colorize_stmt!(IF_ELSE_STMT), indent_lvl=indent_lvl);
+                nest!({
+                    println!("{:indent_lvl$}{} {{", "", colorize_attr!(Master), indent_lvl=indent_lvl);
+
+                    nest!({
+                        Program::print_stmt_with_lvl(&*master, indent_lvl);
+                    });
+
+                    println!("{:indent_lvl$}}}", "", indent_lvl=indent_lvl);
+                    println!("{:indent_lvl$}{} {{", "", colorize_attr!(Alternates), indent_lvl=indent_lvl);
+
+                    nest!({
+                        for alternate in alternates {
+                            Program::print_stmt_with_lvl(alternate, indent_lvl);
+                        }
+                    });
+
+                    println!("{:indent_lvl$}}}", "", indent_lvl=indent_lvl);
                 });
 
-                println!("{:indent$}}}", "", indent=indent);
-                println!("{:indent$}{} {{", "", colorize_attr!(Alternates), indent=indent);
-
+                println!("{:indent_lvl$}}}", "", indent_lvl=indent_lvl);
+            }
+            Stmt::While { main, conditions, body } => {
+                println!("{:indent_lvl$}{} {} {{", "", colorize_stmt!(WHILE_STMT), main);
                 nest!({
-                    for alternate in alternates {
-                        _print_ast(alternate, indent);
-                    }
+                    println!("{:indent_lvl$}{} {{", "", colorize_attr!(Conditions), indent_lvl=indent_lvl);
+                    nest!({
+                        for condition in conditions {
+                            println!("{:indent_lvl$}{}", "", condition, indent_lvl=indent_lvl);
+                        }
+                    });
+                    println!("{:indent_lvl$}}}", "", indent_lvl=indent_lvl);
+                    Program::print_stmt_with_lvl(&*body, indent_lvl);
                 });
-
-                println!("{:indent$}}}", "", indent=indent);
-            });
-
-            println!("{:indent$}}}", "", indent=indent);
-        }
-        Stmt::While { main, conditions, body } => {
-            println!("{:indent$}{} {} {{", "", colorize_stmt!(WHILE_STMT), main);
-            nest!({
-                println!("{:indent$}{} {{", "", colorize_attr!(Conditions), indent=indent);
+                println!("{:indent_lvl$}}}", "", indent_lvl=indent_lvl);
+            }
+            Stmt::Let { main, name, token } => {
+                println!("{:indent_lvl$}{} {} {{", "", colorize_stmt!(LET_STMT), main);
                 nest!({
-                    for condition in conditions {
-                        println!("{:indent$}{}", "", condition, indent=indent);
-                    }
+                    println!("{:indent_lvl$}{}: {}", "", colorize_attr!(Identifier), name, indent_lvl=indent_lvl);
+                    println!("{:indent_lvl$}{}: {}", "", colorize_attr!(Token), token, indent_lvl=indent_lvl);
                 });
-                println!("{:indent$}}}", "", indent=indent);
-                _print_ast(&*body, indent);
-            });
-            println!("{:indent$}}}", "", indent=indent);
-        }
-        Stmt::Let { main, name, token } => {
-            println!("{:indent$}{} {} {{", "", colorize_stmt!(LET_STMT), main);
-            nest!({
-                println!("{:indent$}{}: {}", "", colorize_attr!(Identifier), name, indent=indent);
-                println!("{:indent$}{}: {}", "", colorize_attr!(Token), token, indent=indent);
-            });
-            println!("{:indent$}}}", "", indent=indent);
-        }
-        Stmt::Fn { main: _, name, args, body } => {
-            println!("{:indent$}{} {} {{", "", colorize_stmt!(FUNC_DECL), name);
-            nest!({
-                println!("{:indent$}{}: {:?}", "", colorize_attr!(Args), args, indent=indent);
-                _print_ast(&*body, indent);
-            });
-            println!("{:indent$}}}", "", indent=indent);
-        }
+                println!("{:indent_lvl$}}}", "", indent_lvl=indent_lvl);
+            }
+            Stmt::Fn { main: _, name, args, body } => {
+                println!("{:indent_lvl$}{} {} {{", "", colorize_stmt!(FUNC_DECL), name);
+                nest!({
+                    println!("{:indent_lvl$}{}: {:?}", "", colorize_attr!(Args), args, indent_lvl=indent_lvl);
+                    Program::print_stmt_with_lvl(&*body, indent_lvl);
+                });
+                println!("{:indent_lvl$}}}", "", indent_lvl=indent_lvl);
+            }
 
-        _ => (),
-    };
-}
-
-pub fn print_ast(program: Stmt) {
-    let stmts = program.unwrap_program();
-    stmts.iter().for_each(|stmt| _print_ast(stmt, 0));
+            _ => (),
+        };
+    }
 }

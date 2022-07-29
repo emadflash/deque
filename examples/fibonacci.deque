@@ -11,7 +11,7 @@
 !while !dup !10 !> {
     !a !b !+ !let c
     !c !println
-    
+
     !b !let a
     !c !let b
 

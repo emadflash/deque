@@ -26,6 +26,11 @@ pub enum ParseError {
         found: TokenKind,
     },
 
+    #[error("unexpected token kind: {found:?}")]
+    UnexpectedToken {
+        found: TokenKind,
+    },
+
     #[error("Invaild stmt: {msg:?}")]
     InvaildStmt { msg: String }
 }
@@ -85,92 +90,94 @@ impl<'a, 'src> Parser<'a> {
 
         let expr = match tok.kind {
             TokenKind::Punctuation { kind: PunctuationKind::Bang, .. } => match self.lexer.next() {
-                Some(arg) => match arg?.kind {
-                    TokenKind::Number { num, .. } => Ok(Expr::PushLeft {
-                        expr: Box::new(Expr::Number { num }),
-                    }),
+                None => Err(ParseError::MissingExpr),
+                Some(arg) => {
+                    let arg = arg?;
+                    match arg.kind {
+                        TokenKind::Number { num, .. } => Ok(Expr::PushLeft {
+                            expr: Box::new(Expr::Number { num }),
+                        }),
 
-                    TokenKind::String { text } => Ok(Expr::PushLeft {
-                        expr: Box::new(Expr::String { text }),
-                    }),
+                        TokenKind::String { text } => Ok(Expr::PushLeft {
+                            expr: Box::new(Expr::String { text }),
+                        }),
 
-                    TokenKind::Bool(value) => Ok(Expr::PushLeft {
-                        expr: Box::new(Expr::Bool(value)),
-                    }),
+                        TokenKind::Bool(value) => Ok(Expr::PushLeft {
+                            expr: Box::new(Expr::Bool(value)),
+                        }),
 
-                    TokenKind::Iden { iden } => {
-                        if self.match_next_token(TokenKind::Punctuation { kind: PunctuationKind::LeftParen, ch: '(' }) {
-                            self.lexer.next();
-                            self.expect(TokenKind::Punctuation { kind: PunctuationKind::RightParen, ch: ')' })?;
-                            return Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Call { name: iden })
+                        TokenKind::Iden { iden } => {
+                            if self.match_next_token(TokenKind::Punctuation { kind: PunctuationKind::LeftParen, ch: '(' }) {
+                                self.lexer.next();
+                                self.expect(TokenKind::Punctuation { kind: PunctuationKind::RightParen, ch: ')' })?;
+                                return Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Call { name: iden })
+                                })
+                            }
+                            Ok(Expr::PushLeft {
+                                expr: Box::new(Expr::Iden { iden })
                             })
                         }
-                        Ok(Expr::PushLeft {
-                            expr: Box::new(Expr::Iden { iden })
-                        })
+
+                        TokenKind::Keyword { kind } => match &kind {
+                            KwKind::Dup => Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { kind: OpKind::Dup }),
+                            }),
+                            KwKind::_Drop => Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { kind: OpKind::_Drop }),
+                            }),
+                            KwKind::_Eq => Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { kind: OpKind::_Eq }),
+                            }),
+                            KwKind::Let => Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { kind: OpKind::Let }),
+                            }),
+                            KwKind::Return => Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { kind: OpKind::Return }),
+                            }),
+                            KwKind::If => Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { kind: OpKind::If }),
+                            }),
+                            KwKind::While => Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { kind: OpKind::While }),
+                            }),
+                            KwKind::Inc => Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { kind: OpKind::Inc }),
+                            }),
+                            KwKind::Dec => Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { kind: OpKind::Dec }),
+                            }),
+                            KwKind::Print => Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { kind: OpKind::Print }),
+                            }),
+                            KwKind::Println => Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { kind: OpKind::Println }),
+                            }),
+                            _ => unreachable!(),
+                        },
+
+                        TokenKind::Punctuation { ref kind, .. } => match kind {
+                            PunctuationKind::Plus => Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { kind: OpKind::Plus }),
+                            }),
+                            PunctuationKind::Minus => Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { kind: OpKind::Minus }),
+                            }),
+                            PunctuationKind::Mod => Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { kind: OpKind::Mod }),
+                            }),
+                            PunctuationKind::GreaterThan => Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { kind: OpKind::GreaterThan }),
+                            }),
+                            PunctuationKind::LessThan => Ok(Expr::PushLeft {
+                                    expr: Box::new(Expr::Op { kind: OpKind::LessThan }),
+                            }),
+                            _ => Err(ParseError::UnexpectedToken { found: arg.kind }),
+                        },
+
+                        _ => unreachable!(),
                     }
-
-                    TokenKind::Keyword { kind } => match &kind {
-                        KwKind::Dup => Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { kind: OpKind::Dup }),
-                        }),
-                        KwKind::_Drop => Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { kind: OpKind::_Drop }),
-                        }),
-                        KwKind::_Eq => Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { kind: OpKind::_Eq }),
-                        }),
-                        KwKind::Let => Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { kind: OpKind::Let }),
-                        }),
-                        KwKind::Return => Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { kind: OpKind::Return }),
-                        }),
-                        KwKind::If => Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { kind: OpKind::If }),
-                        }),
-                        KwKind::While => Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { kind: OpKind::While }),
-                        }),
-                        KwKind::Inc => Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { kind: OpKind::Inc }),
-                        }),
-                        KwKind::Dec => Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { kind: OpKind::Dec }),
-                        }),
-                        KwKind::Print => Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { kind: OpKind::Print }),
-                        }),
-                        KwKind::Println => Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { kind: OpKind::Println }),
-                        }),
-                        _ => unreachable!(),
-                    },
-
-                    TokenKind::Punctuation { kind, .. } => match &kind {
-                        PunctuationKind::Plus => Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { kind: OpKind::Plus }),
-                        }),
-                        PunctuationKind::Minus => Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { kind: OpKind::Minus }),
-                        }),
-                        PunctuationKind::Mod => Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { kind: OpKind::Mod }),
-                        }),
-                        PunctuationKind::GreaterThan => Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { kind: OpKind::GreaterThan }),
-                        }),
-                        PunctuationKind::LessThan => Ok(Expr::PushLeft {
-                                expr: Box::new(Expr::Op { kind: OpKind::LessThan }),
-                        }),
-                        _ => unreachable!(),
-                    },
-
-                    _ => unreachable!(),
                 },
-
-                None => Err(ParseError::MissingExpr),
             },
 
             TokenKind::Keyword { kind, .. } => {
@@ -450,7 +457,7 @@ impl<'a, 'src> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> anyhow::Result<Stmt, ParseError> {
+    pub fn parse(&mut self) -> anyhow::Result<Program, ParseError> {
         let mut stmts: Vec<Stmt> = Vec::new();
 
         while let Some(tok) = self.lexer.peek() {
@@ -460,7 +467,7 @@ impl<'a, 'src> Parser<'a> {
             stmts.push(self.parse_stmt()?);
         }
 
-        Ok(Stmt::Program { stmts })
+        Ok(Program::new(stmts))
     }
 }
 
@@ -470,7 +477,7 @@ mod tests {
 
     macro_rules! program {
         ($a:expr )=> {
-           Stmt::Program { stmts: $a }
+           Program::new($a)
        }
     }
 

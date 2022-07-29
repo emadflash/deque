@@ -1,6 +1,5 @@
 use std::{error::Error, fs};
 
-use deque::ast::print_ast;
 use deque::interpreter::Interpreter;
 use deque::lexer::print_lexical_analysis;
 use deque::parser::Parser;
@@ -50,9 +49,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if is_print_ast {
-        let mut parser = Parser::new(&source_files[0]).unwrap();
-        let ast = parser.parse().unwrap();
-        print_ast(ast);
+        let mut parser = Parser::new(&source_files[0])?;
+        match parser.parse() {
+            Err(e) => eprintln!("Error: {}", e),
+            Ok(program) => program.print_ast(),
+        }
     } else if is_lex {
         print_lexical_analysis(&source_files[0]);
     }
